@@ -159,6 +159,15 @@ function triggerChaosEffect(effectId, duration, timestamp) {
 function getChaosModStatus() {
     if (!currentPort) {
         console.error('No port configured for Chaos Mod');
+        fetch(`https://cougars/chaosStatusResponse`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                chaos_mod_active: false
+            })
+        });
         return;
     }
     
@@ -187,6 +196,16 @@ function getChaosModStatus() {
     })
     .catch(error => {
         console.error('Error getting chaos mod status:', error);
+        fetch(`https://cougars/chaosStatusResponse`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                chaos_mod_active: false,
+                error: error.message
+            })
+        });
     });
 }
 

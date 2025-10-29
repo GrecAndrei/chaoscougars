@@ -27,6 +27,7 @@ end)
 -- NUI Response Handler
 RegisterNUICallback('chaosResponse', function(data, cb)
     if data.success then
+        chaosModActive = true
         if Config.ChaosDebug then
             print('^2[Chaos] Effect triggered: ' .. data.effectId .. '^7')
         end
@@ -79,6 +80,9 @@ end, false)
 
 print('^2[Cougar Journey] Chaos integration loaded^7')
 
+local chaosModActive = false
+local pendingChaosStatus = false
+
 -- Listen for Ctrl+L toggle (Chaos Mod default toggle key)
 Citizen.CreateThread(function()
     while true do
@@ -118,6 +122,11 @@ RegisterNUICallback('chaosStatusResponse', function(data, cb)
     if data.time_remaining then
         print('^3Time Remaining: ' .. data.time_remaining .. '^7')
     end
+    chaosModActive = data.chaos_mod_active == true
+    if pendingChaosStatus then
+        TriggerServerEvent('cougar:chaosStatusResponse', chaosModActive)
+        pendingChaosStatus = false
+    end
     
     cb('ok')
 end)
@@ -133,7 +142,12 @@ end)
 -- Respond to chaos status requests
 RegisterNetEvent('cougar:requestChaosStatus')
 AddEventHandler('cougar:requestChaosStatus', function()
-    -- Assume chaos is always active for now
-    -- TODO: Actually check Chaos Mod state
-    TriggerServerEvent('cougar:chaosStatusResponse', true)
+    pendingChaosStatus = true
+    GetChaosModStatus()
+    Citizen.SetTimeout(2500, function()
+        if pendingChaosStatus then
+            TriggerServerEvent('cougar:chaosStatusResponse', chaosModActive)
+            pendingChaosStatus = false
+        end
+    end)
 end)

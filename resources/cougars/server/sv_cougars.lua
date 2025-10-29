@@ -63,9 +63,14 @@ Citizen.CreateThread(function()
                     typeData = Config.CougarTypes.normal
                 end
                 
-                print('^2[Server] Spawning ' .. typeName .. ' cougar^7')
+                local controller = GetSpawnController()
                 
-                TriggerClientEvent('cougar:spawnRequest', -1, spawnPos, typeName, typeData)
+                if controller then
+                    print(string.format('^2[Server] Spawning %s cougar via controller %s^7', typeName, controller))
+                    TriggerClientEvent('cougar:spawnRequest', controller, spawnPos, typeName, typeData)
+                else
+                    print('^1[Server] Unable to spawn cougar - no controller available^7')
+                end
             end
         end
     end
@@ -80,15 +85,19 @@ AddEventHandler('cougar:spawnedConfirm', function(netId, typeName, position)
         position = position,
         spawnTime = os.time()
     }
+    
+    local typeData = Config.CougarTypes[typeName] or Config.CougarTypes.normal
+    TriggerClientEvent('cougar:spawned', -1, netId, typeName, typeData)
 end)
 
 -- Cougar Death Handler
 RegisterNetEvent('cougar:died')
-AddEventHandler('cougar:died', function(netId)
+AddEventHandler('cougar:died', function(netId, reportedType)
     if not JourneySession.cougars[netId] then return end
     
     local cougarData = JourneySession.cougars[netId]
-    local typeData = Config.CougarTypes[cougarData.type]
+    local typeKey = reportedType or cougarData.type or 'normal'
+    local typeData = Config.CougarTypes[typeKey] or Config.CougarTypes.normal
     
     -- Handle loot drops
     if typeData.dropOnDeath then
@@ -106,6 +115,7 @@ AddEventHandler('cougar:died', function(netId)
     
     -- Remove from tracking
     JourneySession.cougars[netId] = nil
+    TriggerClientEvent('cougar:cougarRemoved', -1, netId)
 end)
 
 -- Beeper Explosion Handler
@@ -323,15 +333,9 @@ Citizen.CreateThread(function()
             local currentTime = os.time()
             
             for netId, cougarData in pairs(JourneySession.cougars) do
-                -- Remove old cougars
                 if currentTime - cougarData.spawnTime > Config.MaxCougarLifetime then
                     JourneySession.cougars[netId] = nil
-                    cleaned = cleaned + 1
-                end
-                
-                -- Remove invalid entities
-                if not DoesEntityExist(cougarData.entity) then
-                    JourneySession.cougars[netId] = nil
+                    TriggerClientEvent('cougar:cougarRemoved', -1, netId)
                     cleaned = cleaned + 1
                 end
             end

@@ -17,10 +17,11 @@ RegisterCommand('startjourney', function(source, args, rawCommand)
     -- Get all players
     local players = GetPlayers()
     for _, playerId in ipairs(players) do
-        local playerPed = GetPlayerPed(playerId)
+        local playerKey = tonumber(playerId) or playerId
+        local playerPed = GetPlayerPed(playerKey)
         local coords = GetEntityCoords(playerPed)
         
-        JourneySession.players[playerId] = {
+        JourneySession.players[playerKey] = {
             position = vector3(coords.x, coords.y, coords.z),
             deaths = 0,
             health = GetEntityHealth(playerPed),
@@ -131,14 +132,15 @@ Citizen.CreateThread(function()
             
             -- Check each player's distance from center
             for source, data in pairs(JourneySession.players) do
-                local playerPed = GetPlayerPed(source)
+                local playerId = tonumber(source) or source
+                local playerPed = GetPlayerPed(playerId)
                 if DoesEntityExist(playerPed) then
                     local dist = #(data.position - center)
                     
                     if dist > Config.RubberBandRadius then
                         -- Teleport player back to center
                         SetEntityCoords(playerPed, center.x, center.y, center.z)
-                        TriggerClientEvent('chat:addMessage', source, {
+                        TriggerClientEvent('chat:addMessage', playerId, {
                             args = {'^3Warning', 'You strayed too far from the team!'}
                         })
                     end

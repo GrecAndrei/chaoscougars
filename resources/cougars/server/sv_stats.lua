@@ -7,6 +7,7 @@ SessionLeaderboard = {
 
 -- Initialize player stats
 function InitPlayerStats(playerId)
+    playerId = tonumber(playerId) or playerId
     PlayerStats[playerId] = {
         kills = 0,
         deaths = 0,
@@ -22,20 +23,23 @@ end
 -- Comprehensive Cougar Death Handler
 RegisterNetEvent('cougar:died')
 AddEventHandler('cougar:died', function(netId, cougarType)
-    local cougarEntity = NetToEntity(netId)
-    if not DoesEntityExist(cougarEntity) then return end
+    local cougarEntity = NetworkGetEntityFromNetworkId(netId)
+    if not cougarEntity or cougarEntity == 0 or not DoesEntityExist(cougarEntity) then
+        return
+    end
 
     local killer = GetPedSourceOfDeath(cougarEntity)
     local killerPlayer = nil
 
     -- Check if killer is a player
     if IsEntityAPed(killer) and IsPedAPlayer(killer) then
-        for _, id in ipairs(GetPlayers()) do
-            if GetPlayerPed(id) == killer then
-                killerPlayer = id
-                break
-            end
+    for _, id in ipairs(GetPlayers()) do
+        local numericId = tonumber(id) or id
+        if GetPlayerPed(numericId) == killer then
+            killerPlayer = numericId
+            break
         end
+    end
     end
 
     if killerPlayer then
@@ -87,7 +91,7 @@ Citizen.CreateThread(function()
                     PlayerStats[playerId].survivalTime = PlayerStats[playerId].survivalTime + 1
                     
                     if PlayerStats[playerId].survivalTime > SessionLeaderboard.longestSurvival.time then
-                        SessionLeaderboard.longestSurvival.player = GetPlayerName(playerId)
+                        SessionLeaderboard.longestSurvival.player = GetPlayerName(tonumber(playerId) or playerId)
                         SessionLeaderboard.longestSurvival.time = PlayerStats[playerId].survivalTime
                     end
                 end
@@ -115,8 +119,9 @@ AddEventHandler('cougar:requestLeaderboard', function()
     
     local fullBoard = {}
     for playerId, stats in pairs(PlayerStats) do
+        local numericId = tonumber(playerId) or playerId
         table.insert(fullBoard, {
-            name = GetPlayerName(playerId),
+            name = GetPlayerName(numericId),
             kills = stats.kills,
             deaths = stats.deaths,
             survivalTime = stats.survivalTime,

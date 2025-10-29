@@ -45,6 +45,33 @@ function GetDifficultyMultiplier()
     return 1.0
 end
 
+function GetSpawnController()
+    if not JourneySession.active then return nil end
+    
+    local selectedKey = nil
+    
+    for playerId in pairs(JourneySession.players) do
+        if not selectedKey then
+            selectedKey = playerId
+        else
+            local current = tonumber(playerId)
+            local selected = tonumber(selectedKey)
+            
+            if current and selected then
+                if current < selected then
+                    selectedKey = playerId
+                end
+            elseif current and not selected then
+                selectedKey = playerId
+            end
+        end
+    end
+    
+    if not selectedKey then return nil end
+    
+    return tonumber(selectedKey) or selectedKey
+end
+
 print('^2[Cougar Journey] Resource started^7')
 
 RegisterNetEvent('cougar:menuAction')
@@ -74,7 +101,13 @@ AddEventHandler('cougar:menuAction', function(action)
         for i = 1, toSpawn do
             local center = GetTeamCenter()
             local typeName, typeData = SelectCougarType()
-            TriggerClientEvent('cougar:spawnRequest', -1, center, typeName or 'normal', typeData or Config.CougarTypes.normal)
+            local controller = GetSpawnController()
+            
+            if controller then
+                TriggerClientEvent('cougar:spawnRequest', controller, center, typeName or 'normal', typeData or Config.CougarTypes.normal)
+            else
+                print('^1[Menu] Cannot spawn cougars - no controller available^7')
+            end
         end
         
         print('^2[Menu] Spawned ' .. toSpawn .. ' cougars (Total: ' .. (count + toSpawn) .. '/' .. Config.MaxAliveCougars .. ')^7')
@@ -101,7 +134,13 @@ AddEventHandler('cougar:spawnSpecificType', function(typeName)
     local typeData = Config.CougarTypes[typeName]
     local center = GetTeamCenter()
     
-    TriggerClientEvent('cougar:spawnRequest', -1, center, typeName, typeData)
+    local controller = GetSpawnController()
+    
+    if controller then
+        TriggerClientEvent('cougar:spawnRequest', controller, center, typeName, typeData)
+    else
+        print('^1[Menu] Cannot spawn cougars - no controller available^7')
+    end
     
     print('^2[Menu] Spawned ' .. typeName .. ' cougar^7')
 end)
@@ -112,10 +151,11 @@ AddEventHandler('cougar:updatePlayerStatus', function(health, isDead)
     local src = source
 
     if not JourneySession.active then return end
-    if not JourneySession.players[src] then return end
+    local playerData = JourneySession.players[src] or JourneySession.players[tostring(src)]
+    if not playerData then return end
 
-    JourneySession.players[src].health = health
-    JourneySession.players[src].isDead = isDead
+    playerData.health = health
+    playerData.isDead = isDead
 end)
 
 -- Send team info to requesting client
@@ -128,8 +168,9 @@ AddEventHandler('cougar:requestTeamInfo', function()
     local teamData = {}
     
     for playerId, playerData in pairs(JourneySession.players) do
-        teamData[playerId] = {
-            name = GetPlayerName(playerId),
+        local serverId = tonumber(playerId) or playerId
+        teamData[tostring(serverId)] = {
+            name = GetPlayerName(serverId),
             deaths = playerData.deaths,
             health = playerData.health or 0,
             isDead = playerData.isDead or false
@@ -153,7 +194,6 @@ end)
 AddEventHandler('playerDropped', function()
     local src = source
 
-    if JourneySession.players[src] then
-        JourneySession.players[src] = nil
-    end
+    JourneySession.players[src] = nil
+    JourneySession.players[tostring(src)] = nil
 end)

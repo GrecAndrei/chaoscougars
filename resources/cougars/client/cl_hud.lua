@@ -121,10 +121,19 @@ Citizen.CreateThread(function()
                 currentChaosEffect = "None"
             end
             
-            local teamCount = 0
-            for _ in pairs(teamMembers) do teamCount = teamCount + 1 end
+            local localServerId = GetPlayerServerId(PlayerId())
+            local displayMembers = {}
+            local totalMembers = 0
             
-            local hudHeight = 0.22 + (teamCount * 0.02)
+            for playerId, data in pairs(teamMembers) do
+                totalMembers = totalMembers + 1
+                local serverId = tonumber(playerId) or playerId
+                if serverId ~= localServerId then
+                    table.insert(displayMembers, {id = serverId, data = data})
+                end
+            end
+            
+            local hudHeight = 0.22 + (#displayMembers * 0.02)
             local hudX = 0.15
             local hudY = 0.05 + (hudHeight / 2)
             
@@ -197,11 +206,12 @@ Citizen.CreateThread(function()
             end
             
             -- Team members
-            if teamCount > 1 then
-                DrawCleanText("TEAM (" .. teamCount .. ")", leftX, y, 0.32, 4, 150, 255, 150, 255, false)
+            if #displayMembers > 0 then
+                DrawCleanText("TEAM (" .. totalMembers .. ")", leftX, y, 0.32, 4, 150, 255, 150, 255, false)
                 y = y + 0.020
                 
-                for playerId, data in pairs(teamMembers) do
+                for _, entry in ipairs(displayMembers) do
+                    local data = entry.data
                     local hr, hg, hb = 0, 255, 0
                     if data.health < 50 then hr, hg, hb = 255, 150, 0
                     elseif data.health < 25 then hr, hg, hb = 255, 50, 50 end
@@ -214,6 +224,21 @@ Citizen.CreateThread(function()
                     DrawCleanText(nameShort .. " " .. status, leftX, y, 0.28, 4, hr, hg, hb, 255, false)
                     y = y + 0.018
                 end
+            elseif totalMembers > 0 then
+                DrawCleanText("TEAM (YOU)", leftX, y, 0.32, 4, 150, 255, 150, 255, false)
+                y = y + 0.020
+                
+                local playerPed = PlayerPedId()
+                local health = math.floor(GetEntityHealth(playerPed))
+                local isDead = IsEntityDead(playerPed)
+                local hr, hg, hb = 0, 255, 0
+                if health < 50 then hr, hg, hb = 255, 150, 0
+                elseif health < 25 then hr, hg, hb = 255, 50, 50 end
+                if isDead then hr, hg, hb = 150, 150, 150 end
+                
+                local status = isDead and "[DEAD]" or "[" .. health .. "%]"
+                DrawCleanText(GetPlayerName(PlayerId()) .. " " .. status, leftX, y, 0.28, 4, hr, hg, hb, 255, false)
+                y = y + 0.018
             end
         end
     end

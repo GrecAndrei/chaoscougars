@@ -4,22 +4,16 @@ local destinationPoint = nil
 -- Set spawn and destination on journey start
 RegisterNetEvent('cougar:journeyStarted')
 AddEventHandler('cougar:journeyStarted', function()
-    -- Random spawn locations (one edge of map)
     local spawns = {
-        {x = 1550.0, y = 6600.0, z = 20.0, name = "North Edge"},
-        {x = -3000.0, y = 3500.0, z = 10.0, name = "West Coast"},
-        {x = 2800.0, y = -600.0, z = 70.0, name = "East Hills"}
+        {x = 1550.0, y = 6600.0, z = 20.0, name = "North Edge"}
     }
     
-    -- Destinations (opposite edges)
     local destinations = {
-        {x = -1000.0, y = -2800.0, z = 13.0, name = "Airport"},
-        {x = 450.0, y = -3200.0, z = 6.0, name = "LS Docks"},
-        {x = -1800.0, y = -1200.0, z = 13.0, name = "Beach"}
+        {x = -1000.0, y = -2800.0, z = 13.0, name = "Airport"}
     }
     
-    spawnPoint = spawns[math.random(#spawns)]
-    destinationPoint = destinations[math.random(#destinations)]
+    spawnPoint = spawns[1]
+    destinationPoint = destinations[1]
     
     -- Teleport to spawn
     local playerPed = PlayerPedId()

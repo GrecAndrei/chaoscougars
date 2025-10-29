@@ -353,7 +353,8 @@ function TriggerSyncedChaosEffect(effectId, duration)
         effectId, count, duration))
     
     -- Notify clients for HUD display
-    TriggerClientEvent('cougar:chaosEffectTriggered', -1, effectId, duration)
+    TriggerClientEvent('cougar:triggerChaosEffect', -1, effectId, duration, timestamp)
+    TriggerClientEvent('cougar:chaosEffectTriggered', -1, effectId, duration, timestamp)
 end
 
 -- Only trigger if journey is active AND chaos mod is active

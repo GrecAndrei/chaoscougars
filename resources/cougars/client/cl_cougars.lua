@@ -64,21 +64,6 @@ local function normalizePosition(pos)
     return {x = coords.x, y = coords.y, z = coords.z}
 end
 
-local function isLeadSpawner()
-    local players = GetActivePlayers()
-    local myId = GetPlayerServerId(PlayerId())
-    local lowest = myId
-
-    for _, player in ipairs(players) do
-        local serverId = GetPlayerServerId(player)
-        if serverId ~= 0 and serverId < lowest then
-            lowest = serverId
-        end
-    end
-
-    return myId == lowest
-end
-
 local function attachVisualObject(cougar, typeData)
     if not typeData or not typeData.visualObject then
         return nil
@@ -187,6 +172,19 @@ local function spawnCougarAtPosition(spawnPos, typeName, typeData, origin)
     if not DoesEntityExist(cougar) then
         print("^1[COUGAR] Failed to create cougar entity")
         return nil
+    end
+
+    NetworkRegisterEntityAsNetworked(cougar)
+    local attempts = 0
+    local netIdCheck = NetworkGetNetworkIdFromEntity(cougar)
+    while netIdCheck == 0 and attempts < 10 do
+        Wait(0)
+        netIdCheck = NetworkGetNetworkIdFromEntity(cougar)
+        attempts = attempts + 1
+    end
+    if netIdCheck ~= 0 then
+        SetNetworkIdExistsOnAllMachines(netIdCheck, true)
+        SetNetworkIdCanMigrate(netIdCheck, true)
     end
 
     configureCougar(cougar, typeData)
@@ -509,16 +507,16 @@ AddEventHandler('cougar:spawnRequest', function(spawnPos, typeName, typeData)
         return
     end
 
-    if not isLeadSpawner() then
-        return
-    end
-
     local position = normalizePosition(spawnPos)
     local netId, coords, cougar = spawnCougarAtPosition(position, typeName, typeData, "server")
 
     if netId and cougar then
         StartCougarAI(cougar, typeName)
-        TriggerServerEvent('cougar:spawnedConfirm', netId, typeName or "normal", {x = coords.x, y = coords.y, z = coords.z})
+        if netId ~= 0 then
+            TriggerServerEvent('cougar:spawnedConfirm', netId, typeName or "normal", {x = coords.x, y = coords.y, z = coords.z})
+        else
+            print('^1[COUGAR] Invalid network id for spawned cougar^7')
+        end
     end
 end)
 
@@ -530,6 +528,12 @@ AddEventHandler('cougar:spawned', function(netId, typeName, typeData)
 
     local entity = NetworkGetEntityFromNetworkId(netId)
     if entity == 0 then
+        NetworkRequestControlOfNetworkId(netId)
+        Wait(0)
+        entity = NetworkGetEntityFromNetworkId(netId)
+    end
+    if entity == 0 then
+        print('^1[COUGAR] Failed to resolve entity for NetID ' .. tostring(netId) .. '^7')
         return
     end
 

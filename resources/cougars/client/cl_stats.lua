@@ -61,8 +61,9 @@ Citizen.CreateThread(function()
         Wait(0)
         
         if journeyActive then
-            -- Hold TAB to show
-            if IsControlPressed(0, 37) then -- TAB
+            local scoreboardControl = 20 -- INPUT_MULTIPLAYER_INFO (default Z)
+            
+            if IsControlPressed(0, scoreboardControl) then
                 showStatsMenu = true
             else
                 showStatsMenu = false
@@ -135,7 +136,7 @@ function DrawStatsMenu()
     end
     
     -- Hint
-    DrawAdvancedText("Hold TAB to view stats", 0.5, 0.92, 0.3, 4, 150, 150, 150, 255, true)
+    DrawAdvancedText("Hold Z to view stats", 0.5, 0.92, 0.3, 4, 150, 150, 150, 255, true)
 end
 
 function FormatTime(seconds)

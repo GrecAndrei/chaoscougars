@@ -7,7 +7,8 @@ JourneySession = {
     startTime = 0,
     cougars = {}, -- {[netId] = {type = 'normal', entity = id, position = vec3}}
     lastSpawnTime = 0,
-    lastCropDusterTime = 0
+    lastCropDusterTime = 0,
+    spawnController = nil
 }
 
 -- Utility Functions
@@ -45,31 +46,42 @@ function GetDifficultyMultiplier()
     return 1.0
 end
 
-function GetSpawnController()
-    if not JourneySession.active then return nil end
-    
-    local selectedKey = nil
-    
-    for playerId in pairs(JourneySession.players) do
-        if not selectedKey then
-            selectedKey = playerId
-        else
-            local current = tonumber(playerId)
-            local selected = tonumber(selectedKey)
-            
-            if current and selected then
-                if current < selected then
-                    selectedKey = playerId
+function RefreshSpawnController()
+    local bestKey = nil
+    local bestNumeric = nil
+
+    for playerId, _ in pairs(JourneySession.players) do
+        local numericId = tonumber(playerId) or playerId
+        local ped = GetPlayerPed(numericId)
+        if ped ~= 0 and DoesEntityExist(ped) then
+            local numValue = tonumber(numericId)
+            if numValue then
+                if not bestNumeric or numValue < bestNumeric then
+                    bestNumeric = numValue
+                    bestKey = numericId
                 end
-            elseif current and not selected then
-                selectedKey = playerId
+            elseif not bestKey then
+                bestKey = numericId
             end
         end
     end
-    
-    if not selectedKey then return nil end
-    
-    return tonumber(selectedKey) or selectedKey
+
+    JourneySession.spawnController = bestKey
+    return bestKey
+end
+
+function GetSpawnController()
+    if not JourneySession.active then return nil end
+
+    local controller = JourneySession.spawnController
+    if controller then
+        local ped = GetPlayerPed(controller)
+        if ped ~= 0 and DoesEntityExist(ped) then
+            return controller
+        end
+    end
+
+    return RefreshSpawnController()
 end
 
 print('^2[Cougar Journey] Resource started^7')
@@ -104,9 +116,11 @@ AddEventHandler('cougar:menuAction', function(action)
             local controller = GetSpawnController()
             
             if controller then
+                print(string.format('^2[Menu] Requesting %s cougar via controller %s^7', typeName or 'normal', tostring(controller)))
                 TriggerClientEvent('cougar:spawnRequest', controller, center, typeName or 'normal', typeData or Config.CougarTypes.normal)
             else
-                print('^1[Menu] Cannot spawn cougars - no controller available^7')
+                print('^1[Menu] No controller available - broadcasting spawn request^7')
+                TriggerClientEvent('cougar:spawnRequest', -1, center, typeName or 'normal', typeData or Config.CougarTypes.normal)
             end
         end
         
@@ -137,9 +151,11 @@ AddEventHandler('cougar:spawnSpecificType', function(typeName)
     local controller = GetSpawnController()
     
     if controller then
+        print(string.format('^2[Menu] Requesting %s cougar via controller %s^7', typeName, tostring(controller)))
         TriggerClientEvent('cougar:spawnRequest', controller, center, typeName, typeData)
     else
-        print('^1[Menu] Cannot spawn cougars - no controller available^7')
+        print('^1[Menu] No controller available - broadcasting spawn request^7')
+        TriggerClientEvent('cougar:spawnRequest', -1, center, typeName, typeData)
     end
     
     print('^2[Menu] Spawned ' .. typeName .. ' cougar^7')
@@ -196,4 +212,7 @@ AddEventHandler('playerDropped', function()
 
     JourneySession.players[src] = nil
     JourneySession.players[tostring(src)] = nil
+    if JourneySession.spawnController == src or JourneySession.spawnController == tostring(src) then
+        RefreshSpawnController()
+    end
 end)

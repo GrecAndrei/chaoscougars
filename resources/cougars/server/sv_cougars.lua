@@ -69,7 +69,8 @@ Citizen.CreateThread(function()
                     print(string.format('^2[Server] Spawning %s cougar via controller %s^7', typeName, controller))
                     TriggerClientEvent('cougar:spawnRequest', controller, spawnPos, typeName, typeData)
                 else
-                    print('^1[Server] Unable to spawn cougar - no controller available^7')
+                    print('^1[Server] No controller available - broadcasting cougar spawn^7')
+                    TriggerClientEvent('cougar:spawnRequest', -1, spawnPos, typeName, typeData)
                 end
             end
         end
@@ -175,6 +176,11 @@ function SpawnCropduster()
     -- FiveM: Use SetEntityAsMissionEntity
     SetEntityAsMissionEntity(plane, true, true)
     SetVehicleHasBeenOwnedByPlayer(plane, true)
+    local planeNetId = NetworkGetNetworkIdFromEntity(plane)
+    if planeNetId ~= 0 then
+        SetNetworkIdExistsOnAllMachines(planeNetId, true)
+        SetNetworkIdCanMigrate(planeNetId, true)
+    end
     
     -- Set heading toward team
     local heading = math.atan2(center.y - spawnPos.y, center.x - spawnPos.x) * 180 / math.pi
@@ -201,6 +207,11 @@ function SpawnCropduster()
         -- FiveM: Use SetEntityAsMissionEntity
         SetEntityAsMissionEntity(cougar, true, true)
         SetVehicleHasBeenOwnedByPlayer(cougar, true)
+        local refNetId = NetworkGetNetworkIdFromEntity(cougar)
+        if refNetId ~= 0 then
+            SetNetworkIdExistsOnAllMachines(refNetId, true)
+            SetNetworkIdCanMigrate(refNetId, true)
+        end
         
         -- Put cougar in plane
         SetPedIntoVehicle(cougar, plane, i - 2) -- -1 = driver, -2 = passenger, etc.

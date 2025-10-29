@@ -28,6 +28,7 @@ RegisterCommand('startjourney', function(source, args, rawCommand)
             isDead = false
         }
     end
+    RefreshSpawnController()
     
     -- Notify all clients
     TriggerClientEvent('cougar:journeyStarted', -1)
@@ -57,6 +58,7 @@ RegisterCommand('stopjourney', function(source, args, rawCommand)
     
     JourneySession.active = false
     JourneySession.cougars = {}
+    JourneySession.spawnController = nil
     
     TriggerClientEvent('cougar:journeyStopped', -1)
     
@@ -92,6 +94,7 @@ AddEventHandler('cougar:updatePosition', function(position)
             health = 0,
             isDead = false
         }
+        RefreshSpawnController()
     else
         JourneySession.players[src].position = pos
     end

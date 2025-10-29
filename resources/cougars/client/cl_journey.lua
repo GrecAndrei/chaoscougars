@@ -23,7 +23,7 @@ Citizen.CreateThread(function()
                             
                             -- BLUE BALL
                             if data.type == 'blueBall' then
-                                if not data.lastEffect or currentTime > data.lastEffect + 2000 then
+                                if not data.abilityUsed then
                                     print('^3>>> BLUE BALL LAUNCHING <<<^7')
                                     
                                     -- Ragdoll first
@@ -37,13 +37,26 @@ Citizen.CreateThread(function()
                                     
                                     PlaySoundFrontend(-1, "CHECKPOINT_PERFECT", "HUD_MINI_GAME_SOUNDSET", true)
                                     
-                                    data.lastEffect = currentTime
+                                    if data.prop and DoesEntityExist(data.prop) then
+                                        DetachEntity(data.prop, true, true)
+                                        SetEntityVelocity(data.prop, 0.0, 0.0, 5.0)
+                                        data.prop = nil
+                                    end
+
+                                    data.abilityUsed = true
+                                    data.reportedDead = true
+                                    TriggerServerEvent('cougar:died', netId, data.type)
+                                    if DoesEntityExist(data.entity) then
+                                        SetEntityHealth(data.entity, 0)
+                                        DeleteEntity(data.entity)
+                                    end
+                                    localCougars[netId] = nil
                                 end
                             end
                             
                             -- PURPLE BALL
                             if data.type == 'purpleBall' then
-                                if not data.lastEffect or currentTime > data.lastEffect + 3000 then
+                                if not data.abilityUsed then
                                     print('^5>>> PURPLE BALL MEGA LAUNCHING <<<^7')
                                     
                                     SetPedToRagdoll(playerPed, 3000, 3000, 0, false, false, false)
@@ -56,13 +69,26 @@ Citizen.CreateThread(function()
                                     StartScreenEffect("RaceTurbo", 2000, false)
                                     PlaySoundFrontend(-1, "FLIGHT_TURBULENCE_MASTER", "HUD_AWARDS", true)
                                     
-                                    data.lastEffect = currentTime
+                                    if data.prop and DoesEntityExist(data.prop) then
+                                        DetachEntity(data.prop, true, true)
+                                        SetEntityVelocity(data.prop, 0.0, 0.0, 8.0)
+                                        data.prop = nil
+                                    end
+
+                                    data.abilityUsed = true
+                                    data.reportedDead = true
+                                    TriggerServerEvent('cougar:died', netId, data.type)
+                                    if DoesEntityExist(data.entity) then
+                                        SetEntityHealth(data.entity, 0)
+                                        DeleteEntity(data.entity)
+                                    end
+                                    localCougars[netId] = nil
                                 end
                             end
                             
                             -- BARRIER
                             if data.type == 'barrier' then
-                                if not data.lastEffect or currentTime > data.lastEffect + 1500 then
+                                if not data.abilityUsed then
                                     print('^6>>> BARRIER REVERSING <<<^7')
                                     
                                     local vel = GetEntityVelocity(playerPed)
@@ -76,7 +102,19 @@ Citizen.CreateThread(function()
                                     
                                     PlaySoundFrontend(-1, "CHECKPOINT_UNDER_THE_BRIDGE", "HUD_MINI_GAME_SOUNDSET", true)
                                     
-                                    data.lastEffect = currentTime
+                                    if data.prop and DoesEntityExist(data.prop) then
+                                        DetachEntity(data.prop, true, true)
+                                        data.prop = nil
+                                    end
+
+                                    data.abilityUsed = true
+                                    data.reportedDead = true
+                                    TriggerServerEvent('cougar:died', netId, data.type)
+                                    if DoesEntityExist(data.entity) then
+                                        SetEntityHealth(data.entity, 0)
+                                        DeleteEntity(data.entity)
+                                    end
+                                    localCougars[netId] = nil
                                 end
                             end
                             
@@ -95,11 +133,14 @@ Citizen.CreateThread(function()
                                 local vel = GetEntityVelocity(playerPed)
                                 SetEntityVelocity(playerPed, vel.x, vel.y, vel.z + 20.0)
                                 
-                                DeleteEntity(data.entity)
-                                if data.attachedObj and DoesEntityExist(data.attachedObj) then
-                                    DeleteEntity(data.attachedObj)
+                                TriggerServerEvent('cougar:beeperExplode', netId)
+                                if data.prop and DoesEntityExist(data.prop) then
+                                    DetachEntity(data.prop, true, true)
+                                    data.prop = nil
                                 end
-                                
+                                if DoesEntityExist(data.entity) then
+                                    DeleteEntity(data.entity)
+                                end
                                 data.hasExploded = true
                                 localCougars[netId] = nil
                             end

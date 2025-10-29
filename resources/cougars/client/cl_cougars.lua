@@ -2,6 +2,13 @@ print("^2========================================")
 print("^2[COUGAR] cl_cougars.lua IS LOADING")
 print("^2========================================")
 
+Citizen.CreateThread(function()
+    local cougarGroup = GetHashKey('COUGAR')
+    local playerGroup = GetHashKey('PLAYER')
+    SetRelationshipBetweenGroups(5, cougarGroup, playerGroup)
+    SetRelationshipBetweenGroups(5, playerGroup, cougarGroup)
+end)
+
 -- ============================================
 -- COUGAR SPAWNING SYSTEM - COMPLETE
 -- ============================================
@@ -64,7 +71,7 @@ local function normalizePosition(pos)
     return {x = coords.x, y = coords.y, z = coords.z}
 end
 
-local function attachVisualObject(cougar, typeData)
+local function attachVisualObject(cougar, typeName, typeData)
     if not typeData or not typeData.visualObject then
         return nil
     end
@@ -79,7 +86,26 @@ local function attachVisualObject(cougar, typeData)
     local prop = CreateObject(objectHash, coords.x, coords.y, coords.z, true, true, false)
 
     if DoesEntityExist(prop) then
-        AttachEntityToEntity(prop, cougar, GetPedBoneIndex(cougar, 11816), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
+        SetEntityLodDist(prop, 0xFFFF)
+        local bone = GetPedBoneIndex(cougar, 11816)
+        local offset = vector3(0.0, 0.0, 0.0)
+        local rot = vector3(0.0, 0.0, 0.0)
+
+        if typeName == 'blueBall' or typeName == 'purpleBall' then
+            bone = GetPedBoneIndex(cougar, 31086)
+        elseif typeName == 'barrier' then
+            offset = vector3(0.0, 0.35, -0.1)
+            rot = vector3(90.0, 0.0, 0.0)
+        elseif typeName == 'health' or typeName == 'armor' or typeName == 'ammo' then
+            offset = vector3(0.0, -0.25, 0.4)
+            rot = vector3(0.0, 0.0, 90.0)
+        elseif typeName == 'jesus' then
+            offset = vector3(0.0, -0.3, 0.5)
+        elseif typeName == 'beeper' then
+            offset = vector3(0.0, 0.3, 0.1)
+        end
+
+        AttachEntityToEntity(prop, cougar, bone, offset.x, offset.y, offset.z, rot.x, rot.y, rot.z, false, false, false, false, 2, true)
         return prop
     end
 
@@ -97,7 +123,8 @@ local function registerCougar(entity, typeName, typeData, origin)
         prop = nil,
         spawnTime = GetGameTimer(),
         origin = origin or "client",
-        reportedDead = false
+        reportedDead = false,
+        abilityUsed = false
     }
 
     return netId, coords
@@ -119,7 +146,7 @@ local function cleanupCougar(netId, deleteEntity)
     cougarAIThreads[netId] = nil
 end
 
-local function configureCougar(entity, typeData)
+local function configureCougar(entity, typeName, typeData)
     SetEntityAsMissionEntity(entity, true, true)
     SetBlockingOfNonTemporaryEvents(entity, true)
     SetPedKeepTask(entity, true)
@@ -128,14 +155,27 @@ local function configureCougar(entity, typeData)
     SetPedCombatAttributes(entity, 5, true)
     SetPedConfigFlag(entity, 281, true)
     SetPedConfigFlag(entity, 208, true)
+    SetPedCombatAttributes(entity, 17, true)
+    SetPedConfigFlag(entity, 292, true)
+    SetPedConfigFlag(entity, 40, true)
+    SetPedCanRagdollFromPlayerImpact(entity, false)
+    SetPedCanEvasiveDive(entity, false)
+    SetPedCanPlayAmbientAnims(entity, false)
+    SetPedCanPlayAmbientBaseAnims(entity, false)
+    StopPedSpeaking(entity, true)
+    DisablePedPainAudio(entity, true)
+    SetPedRelationshipGroupHash(entity, GetHashKey('COUGAR'))
     SetPedCombatMovement(entity, 2)
     SetPedCombatRange(entity, 2)
     SetPedCombatAbility(entity, 100)
     SetPedSeeingRange(entity, 100.0)
     SetPedHearingRange(entity, 100.0)
     SetPedAlertness(entity, 3)
-    SetPedMoveRateOverride(entity, 1.0)
+    SetPedMoveRateOverride(entity, 2.5)
+    SetPedMinMoveBlendRatio(entity, 3.0)
+    SetPedMaxMoveBlendRatio(entity, 3.0)
     SetPedDesiredMoveBlendRatio(entity, 3.0)
+    SetEntityMaxSpeed(entity, 18.0)
 
     if typeData then
         if typeData.health then
@@ -144,9 +184,24 @@ local function configureCougar(entity, typeData)
         end
 
         if typeData.weapon then
-            GiveWeaponToPed(entity, GetHashKey(typeData.weapon), 120, false, true)
-            SetPedAccuracy(entity, typeData.accuracy or 25)
+            local weaponHash = GetHashKey(typeData.weapon)
+            GiveWeaponToPed(entity, weaponHash, 300, false, true)
+            SetCurrentPedWeapon(entity, weaponHash, true)
+            SetPedInfiniteAmmo(entity, true, weaponHash)
+            SetPedShootRate(entity, typeData.shootRate or 300)
+            SetPedAccuracy(entity, typeData.accuracy or 40)
+            SetPedCombatRange(entity, 4)
         end
+    end
+
+    if typeName == 'shooter' then
+        local weaponHash = GetHashKey(typeData and typeData.weapon or 'WEAPON_APPISTOL')
+        GiveWeaponToPed(entity, weaponHash, 300, false, true)
+        SetCurrentPedWeapon(entity, weaponHash, true)
+        SetPedInfiniteAmmo(entity, true, weaponHash)
+        SetPedShootRate(entity, (typeData and typeData.shootRate) or 300)
+        SetPedAccuracy(entity, (typeData and typeData.accuracy) or 55)
+        SetPedCombatRange(entity, 4)
     end
 end
 
@@ -187,11 +242,11 @@ local function spawnCougarAtPosition(spawnPos, typeName, typeData, origin)
         SetNetworkIdCanMigrate(netIdCheck, true)
     end
 
-    configureCougar(cougar, typeData)
+    configureCougar(cougar, typeName, typeData)
 
     local netId, coords = registerCougar(cougar, typeName, typeData, origin)
 
-    local prop = attachVisualObject(cougar, typeData)
+    local prop = attachVisualObject(cougar, typeName, typeData)
     if prop then
         localCougars[netId].prop = prop
     end
@@ -461,13 +516,23 @@ function StartCougarAI(cougar, cougarType)
             local target = PlayerPedId()
             local playerVehicle = GetVehiclePedIsIn(target, false)
             local inVehicle = playerVehicle ~= 0
+            local data = localCougars[netId]
+            local typeName = data and data.type or cougarType
+            local typeInfo = data and data.data or nil
+            local targetPed = target
             
-            if not inVehicle then
-                -- ON FOOT
-                TaskCombatPed(cougar, target, 0, 16)
+            if typeName == 'shooter' then
+                TaskCombatPed(cougar, targetPed, 0, 16)
+                SetPedAccuracy(cougar, typeInfo and typeInfo.accuracy or 55)
+                SetPedShootRate(cougar, typeInfo and typeInfo.shootRate or 300)
+                Wait(600)
+            elseif not inVehicle then
+                TaskCombatPed(cougar, targetPed, 0, 16)
                 SetPedDesiredMoveBlendRatio(cougar, 3.0)
-                SetPedMoveRateOverride(cougar, 1.5)
-                Wait(1500)
+                SetPedMoveRateOverride(cougar, 2.5)
+                SetPedMinMoveBlendRatio(cougar, 3.0)
+                SetPedMaxMoveBlendRatio(cougar, 3.0)
+                Wait(600)
             else
                 -- IN VEHICLE: TaskGoToEntity (smoother for moving targets)
                 local vehicleCoords = GetEntityCoords(playerVehicle)
@@ -486,6 +551,7 @@ function StartCougarAI(cougar, cougarType)
                 elseif distance <= 5.0 then
                     TaskGoToEntity(cougar, playerVehicle, -1, 4.0, 1.5, 1073741824, 0)
                     SetPedMoveRateOverride(cougar, 1.0)
+                    TaskCombatPed(cougar, targetPed, 0, 16)
                     Wait(1000)
                 else
                     Wait(500)
@@ -541,21 +607,49 @@ AddEventHandler('cougar:spawned', function(netId, typeName, typeData)
 
     localCougars[netId] = localCougars[netId] or {
         spawnTime = GetGameTimer(),
-        origin = "server"
+        origin = "server",
+        reportedDead = false,
+        abilityUsed = false
     }
 
     local data = localCougars[netId]
     data.entity = entity
     data.type = typeName
     data.data = typeData
+    if data.prop and DoesEntityExist(data.prop) then
+        DeleteEntity(data.prop)
+        data.prop = nil
+    end
 
-    configureCougar(entity, typeData)
+    configureCougar(entity, typeName, typeData)
     StartCougarAI(entity, typeName)
 end)
 
 RegisterNetEvent('cougar:cougarRemoved')
 AddEventHandler('cougar:cougarRemoved', function(netId)
     cleanupCougar(netId, false)
+end)
+
+RegisterNetEvent('cougar:beeperExplode')
+AddEventHandler('cougar:beeperExplode', function(netId)
+    local data = localCougars[netId]
+    local coords = nil
+
+    if data and data.entity and DoesEntityExist(data.entity) then
+        coords = GetEntityCoords(data.entity)
+    end
+
+    if coords then
+        AddExplosion(coords.x, coords.y, coords.z, 2, 200.0, true, false, 10.0)
+    end
+
+    if data then
+        if data.prop and DoesEntityExist(data.prop) then
+            DetachEntity(data.prop, true, true)
+            data.prop = nil
+        end
+        cleanupCougar(netId, true)
+    end
 end)
 
 Citizen.CreateThread(function()

@@ -32,14 +32,14 @@ AddEventHandler('cougar:died', function(netId, cougarType)
     local killerPlayer = nil
 
     -- Check if killer is a player
-    if IsEntityAPed(killer) and IsPedAPlayer(killer) then
-    for _, id in ipairs(GetPlayers()) do
-        local numericId = tonumber(id) or id
-        if GetPlayerPed(numericId) == killer then
-            killerPlayer = numericId
-            break
+    if killer and killer ~= 0 then
+        for _, id in ipairs(GetPlayers()) do
+            local numericId = tonumber(id) or id
+            if GetPlayerPed(numericId) == killer then
+                killerPlayer = numericId
+                break
+            end
         end
-    end
     end
 
     if killerPlayer then

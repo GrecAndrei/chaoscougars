@@ -19,9 +19,8 @@ local function applyJourneyLoadout()
     SetSwimMultiplierForPlayer(PlayerId(), journeyRunMultiplier)
 
     local weapon = GetHashKey('WEAPON_APPISTOL')
-    GiveWeaponToPed(ped, weapon, 500, false, true)
+    GiveWeaponToPed(ped, weapon, 40, false, true)
     SetCurrentPedWeapon(ped, weapon, true)
-    SetPedInfiniteAmmo(ped, true, weapon)
 end
 
 RegisterNetEvent('cougar:journeyStarted')

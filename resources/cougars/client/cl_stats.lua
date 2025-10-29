@@ -121,18 +121,22 @@ function DrawStatsMenu()
         y = y + 0.02
     end
     
+    local session = leaderboard.session or {}
+    local mostKills = session.mostKills or {player = "-", kills = 0}
+    local longest = session.longestSurvival or {player = "-", time = 0}
+
     -- Session records
     y = y + 0.03
     DrawAdvancedText("SESSION RECORDS", 0.5, y, 0.4, 4, 255, 100, 100, 255, true)
     y = y + 0.025
     
-    if leaderboard.session.mostKills.player then
-        DrawAdvancedText("🏆 Most Kills: " .. leaderboard.session.mostKills.player .. " (" .. leaderboard.session.mostKills.kills .. ")", 0.5, y, 0.35, 4, 255, 255, 255, 255, true)
+    if mostKills.player then
+        DrawAdvancedText("🏆 Most Kills: " .. tostring(mostKills.player) .. " (" .. tostring(mostKills.kills or 0) .. ")", 0.5, y, 0.35, 4, 255, 255, 255, 255, true)
         y = y + 0.022
     end
     
-    if leaderboard.session.longestSurvival.player then
-        DrawAdvancedText("⏱️ Longest Survival: " .. leaderboard.session.longestSurvival.player .. " (" .. FormatTime(leaderboard.session.longestSurvival.time) .. ")", 0.5, y, 0.35, 4, 255, 255, 255, 255, true)
+    if longest.player then
+        DrawAdvancedText("⏱️ Longest Survival: " .. tostring(longest.player) .. " (" .. FormatTime(longest.time or 0) .. ")", 0.5, y, 0.35, 4, 255, 255, 255, 255, true)
     end
     
     -- Hint

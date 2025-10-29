@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div id="hud-container">
+        <!-- Team Stats Panel -->
+        <div id="team-stats" class="panel">
+            <div class="panel-header">Team Stats</div>
+            <div class="stat-row">
+                <span class="stat-label">Progress:</span>
+                <div class="progress-bar-container">
+                    <div id="progress-bar" class="progress-bar"></div>
+                    <span id="progress-text" class="progress-text">0%</span>
+                </div>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Active Cougars:</span>
+                <span id="cougar-count" class="stat-value">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Total Kills:</span>
+                <span id="total-kills" class="stat-value">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Deaths:</span>
+                <span id="total-deaths" class="stat-value">0</span>
+            </div>
+        </div>
+        
+        <!-- Player List Panel -->
+        <div id="player-list" class="panel">
+            <div class="panel-header">Team Members</div>
+            <div id="players-container"></div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

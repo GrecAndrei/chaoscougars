@@ -1,0 +1,796 @@
+# 🔧 CHAOS MOD V - EXACT CLIENT-SIDE INTEGRATION GUIDE
+
+**Goal:** Add HTTP server to Chaos Mod V so it can receive effect triggers from FiveM.
+
+***
+
+## 📋 PART 1: PRE-FLIGHT CHECKLIST
+
+Before you start, verify you have:
+
+- [ ] ChaosModV source code folder
+- [ ] Visual Studio 2022 installed
+- [ ] Python 3.x installed
+- [ ] Internet connection (to download dependencies)
+
+***
+
+## 🔽 PART 2: DOWNLOAD DEPENDENCIES
+
+**Step 1: Open PowerShell in ChaosModV root folder**
+
+```powershell
+# Navigate to your ChaosModV folder
+cd "C:\path\to\ChaosModV"
+```
+
+**Step 2: Create vendor directories**
+
+```powershell
+New-Item -ItemType Directory -Path "vendor\httplib" -Force
+New-Item -ItemType Directory -Path "vendor\nlohmann" -Force
+```
+
+**Step 3: Download cpp-httplib**
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/yhirose/cpp-httplib/master/httplib.h" -OutFile "vendor\httplib\httplib.h"
+```
+
+**Verify:** Check that `vendor\httplib\httplib.h` exists (should be ~10,000 lines)
+
+**Step 4: Download nlohmann/json**
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/nlohmann/json/develop/single_include/nlohmann/json.hpp" -OutFile "vendor\nlohmann\json.hpp"
+```
+
+**Verify:** Check that `vendor\nlohmann\json.hpp` exists (should be ~25,000 lines)
+
+---
+
+## 📝 PART 3: CREATE NEW FILES
+
+### File 1: ChaosMod/ExternalTrigger.h
+
+**Create:** `ChaosMod\ExternalTrigger.h`
+
+```cpp
+#pragma once
+
+#include <httplib.h>
+#include <thread>
+#include <functional>
+#include <string>
+#include <atomic>
+
+namespace ExternalTrigger
+{
+    class TriggerServer
+    {
+    private:
+        httplib::Server m_Server;
+        std::thread m_ServerThread;
+        std::function<void(const std::string&, int)> m_OnEffectReceived;
+        int m_Port;
+        std::atomic<bool> m_Running;
+        
+        void SetupRoutes();
+        void AddCORSHeaders(httplib::Response& res);
+
+    public:
+        TriggerServer(int port = 8080);
+        ~TriggerServer();
+
+        void Start();
+        void Stop();
+        void SetEffectCallback(std::function<void(const std::string&, int)> callback);
+        bool IsRunning() const { return m_Running; }
+    };
+
+    inline TriggerServer* g_TriggerServer = nullptr;
+
+    void Initialize(int port = 8080);
+    void Shutdown();
+}
+```
+
+***
+
+### File 2: ChaosMod/ExternalTrigger.cpp
+
+**Create:** `ChaosMod\ExternalTrigger.cpp`
+
+```cpp
+#include "stdafx.h"
+#include "ExternalTrigger.h"
+#include "EffectDatabase.h"
+#include "Util/Logging.h"
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
+
+namespace ExternalTrigger
+{
+    TriggerServer::TriggerServer(int port)
+        : m_Port(port), m_Running(false)
+    {
+    }
+
+    TriggerServer::~TriggerServer()
+    {
+        Stop();
+    }
+
+    void TriggerServer::AddCORSHeaders(httplib::Response& res)
+    {
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.set_header("Access-Control-Allow-Headers", "Content-Type, Accept");
+        res.set_header("Access-Control-Max-Age", "86400");
+    }
+
+    void TriggerServer::SetupRoutes()
+    {
+        // CORS preflight
+        m_Server.Options("/.*", [this](const httplib::Request& req, httplib::Response& res) 
+        {
+            AddCORSHeaders(res);
+            res.status = 204;
+        });
+
+        // Ping endpoint
+        m_Server.Get("/ping", [this](const httplib::Request& req, httplib::Response& res) 
+        {
+            AddCORSHeaders(res);
+            res.set_content("pong", "text/plain");
+            res.status = 200;
+            
+            LOG("[External Trigger] Ping received");
+        });
+
+        // Main trigger endpoint
+        m_Server.Post("/trigger", [this](const httplib::Request& req, httplib::Response& res) 
+        {
+            AddCORSHeaders(res);
+            
+            try
+            {
+                auto json_body = json::parse(req.body);
+                
+                std::string effectId = json_body["effectId"].get<std::string>();
+                int duration = json_body.value("duration", 0);
+                
+                LOG("[External Trigger] Received: " << effectId << " (duration: " << duration << "ms)");
+                
+                if (m_OnEffectReceived)
+                {
+                    m_OnEffectReceived(effectId, duration);
+                    res.set_content("{\"status\":\"success\"}", "application/json");
+                    res.status = 200;
+                }
+                else
+                {
+                    LOG("[External Trigger] ERROR: No effect callback registered");
+                    res.set_content("{\"status\":\"error\",\"message\":\"No callback\"}", "application/json");
+                    res.status = 500;
+                }
+            }
+            catch (const json::parse_error& e)
+            {
+                LOG("[External Trigger] JSON parse error: " << e.what());
+                res.set_content("{\"status\":\"error\",\"message\":\"Invalid JSON\"}", "application/json");
+                res.status = 400;
+            }
+            catch (const std::exception& e)
+            {
+                LOG("[External Trigger] Error: " << e.what());
+                res.set_content("{\"status\":\"error\",\"message\":\"Internal error\"}", "application/json");
+                res.status = 500;
+            }
+        });
+
+        // Status endpoint
+        m_Server.Get("/status", [this](const httplib::Request& req, httplib::Response& res) 
+        {
+            AddCORSHeaders(res);
+            
+            json status_json = {
+                {"running", m_Running.load()},
+                {"port", m_Port},
+                {"version", "1.0.0"}
+            };
+            
+            res.set_content(status_json.dump(), "application/json");
+            res.status = 200;
+        });
+    }
+
+    void TriggerServer::Start()
+    {
+        if (m_Running)
+        {
+            LOG("[External Trigger] Already running");
+            return;
+        }
+
+        m_Running = true;
+        SetupRoutes();
+
+        m_ServerThread = std::thread([this]() 
+        {
+            LOG("[External Trigger] Starting HTTP server on 0.0.0.0:" << m_Port);
+            
+            if (!m_Server.listen("0.0.0.0", m_Port))
+            {
+                LOG("[External Trigger] ERROR: Failed to start server on port " << m_Port);
+                m_Running = false;
+            }
+        });
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        if (m_Running)
+        {
+            LOG("[External Trigger] HTTP server started successfully");
+        }
+    }
+
+    void TriggerServer::Stop()
+    {
+        if (!m_Running)
+            return;
+
+        LOG("[External Trigger] Stopping HTTP server...");
+        
+        m_Running = false;
+        m_Server.stop();
+        
+        if (m_ServerThread.joinable())
+        {
+            m_ServerThread.join();
+        }
+
+        LOG("[External Trigger] HTTP server stopped");
+    }
+
+    void TriggerServer::SetEffectCallback(std::function<void(const std::string&, int)> callback)
+    {
+        m_OnEffectReceived = callback;
+        LOG("[External Trigger] Effect callback registered");
+    }
+
+    void Initialize(int port)
+    {
+        if (g_TriggerServer)
+        {
+            LOG("[External Trigger] Already initialized");
+            return;
+        }
+
+        LOG("[External Trigger] Initializing...");
+
+        g_TriggerServer = new TriggerServer(port);
+        
+        g_TriggerServer->SetEffectCallback([](const std::string& effectId, int duration) 
+        {
+            auto effect = EffectDatabase::GetEffectById(effectId);
+            
+            if (effect)
+            {
+                LOG("[External Trigger] Dispatching effect: " << effectId);
+                
+                // TODO: Implement duration override if needed
+                // effect->SetCustomDuration(duration);
+                
+                // This line will fail if EffectDispatcher isn't accessible
+                // You may need to adjust based on actual Chaos Mod API
+                // EffectDispatcher::DispatchEffect(effect);
+            }
+            else
+            {
+                LOG("[External Trigger] ERROR: Unknown effect ID: " << effectId);
+            }
+        });
+
+        g_TriggerServer->Start();
+        
+        LOG("[External Trigger] Initialization complete");
+    }
+
+    void Shutdown()
+    {
+        if (g_TriggerServer)
+        {
+            g_TriggerServer->Stop();
+            delete g_TriggerServer;
+            g_TriggerServer = nullptr;
+            
+            LOG("[External Trigger] Shutdown complete");
+        }
+    }
+}
+```
+
+***
+
+### File 3: ChaosMod/EffectDatabase.h
+
+**Create:** `ChaosMod\EffectDatabase.h`
+
+```cpp
+#pragma once
+
+#include <unordered_map>
+#include <string>
+#include <vector>
+
+// Forward declaration - adjust based on actual Chaos Mod structure
+class RegisteredEffect;
+
+namespace EffectDatabase
+{
+    extern std::unordered_map<std::string, RegisteredEffect*> g_EffectRegistry;
+    
+    void InitializeRegistry();
+    
+    RegisteredEffect* GetEffectById(const std::string& effectId);
+    
+    std::vector<std::string> GetAllEffectIds();
+    
+    bool HasEffect(const std::string& effectId);
+}
+```
+
+***
+
+### File 4: ChaosMod/EffectDatabase.cpp (TEMPLATE)
+
+**Create:** `ChaosMod\EffectDatabase.cpp`
+
+```cpp
+#include "stdafx.h"
+#include "EffectDatabase.h"
+#include "Util/Logging.h"
+
+// TODO: Include all effect headers here
+// Example:
+// #include "Effects/Player/PlayerDrunk.h"
+// #include "Effects/Player/PlayerRagdoll.h"
+// ... (350+ includes)
+
+namespace EffectDatabase
+{
+    std::unordered_map<std::string, RegisteredEffect*> g_EffectRegistry;
+    
+    void InitializeRegistry()
+    {
+        LOG("[Effect Database] Initializing effect registry...");
+        
+        // TODO: Register all effects here
+        // Example format:
+        // g_EffectRegistry["player_drunk"] = &RegisteredEffect::GetEffect<PlayerDrunk>();
+        // g_EffectRegistry["player_ragdoll"] = &RegisteredEffect::GetEffect<PlayerRagdoll>();
+        
+        // TEMPORARY: Add a few test effects manually to verify system works
+        // You'll replace this with Python-generated code
+        
+        LOG("[Effect Database] Registered " << g_EffectRegistry.size() << " effects");
+    }
+    
+    RegisteredEffect* GetEffectById(const std::string& effectId)
+    {
+        auto it = g_EffectRegistry.find(effectId);
+        if (it != g_EffectRegistry.end())
+        {
+            return it->second;
+        }
+        
+        LOG("[Effect Database] Unknown effect ID: " << effectId);
+        return nullptr;
+    }
+    
+    std::vector<std::string> GetAllEffectIds()
+    {
+        std::vector<std::string> ids;
+        ids.reserve(g_EffectRegistry.size());
+        
+        for (const auto& pair : g_EffectRegistry)
+        {
+            ids.push_back(pair.first);
+        }
+        
+        return ids;
+    }
+    
+    bool HasEffect(const std::string& effectId)
+    {
+        return g_EffectRegistry.find(effectId) != g_EffectRegistry.end();
+    }
+}
+```
+
+***
+
+### File 5: config.ini (in GTA V/scripts/ folder)
+
+**Create:** `config.ini` (will be copied to GTA V later)
+
+```ini
+[ExternalTrigger]
+Enabled=1
+Port=8080
+
+[Logging]
+Verbose=1
+LogFile=chaos_mod.log
+```
+
+***
+
+## 🔧 PART 4: ADD FILES TO VISUAL STUDIO PROJECT
+
+**Step 1: Open ChaosModV.sln**
+
+Double-click `ChaosModV.sln` in your ChaosModV folder.
+
+**Step 2: Locate ChaosMod project**
+
+In Solution Explorer (usually right side):
+- Look for **ChaosMod** (C++ project with a folder icon)
+- NOT ConfigApp, NOT TwitchChatVotingProxy
+
+**Step 3: Add new files to project**
+
+Right-click **ChaosMod** project → Add → Existing Item...
+
+Navigate to `ChaosMod\` folder and add:
+- `ExternalTrigger.h`
+- `ExternalTrigger.cpp`
+- `EffectDatabase.h`
+- `EffectDatabase.cpp`
+
+Click "Add"
+
+**Verify:** These 4 files should now appear under ChaosMod project in Solution Explorer.
+
+***
+
+## ⚙️ PART 5: CONFIGURE INCLUDE DIRECTORIES
+
+**Step 1: Open project properties**
+
+Right-click **ChaosMod** project → Properties
+
+**Step 2: Set configuration**
+
+At the top of Properties window:
+- Configuration: **All Configurations**
+- Platform: **x64**
+
+**Step 3: Add include paths**
+
+Navigate to:
+- Configuration Properties → C/C++ → General → Additional Include Directories
+
+Click the dropdown arrow → **Edit...**
+
+Add these two lines (each on separate line):
+```
+$(ProjectDir)..\vendor\httplib
+$(ProjectDir)..\vendor\nlohmann
+```
+
+Click OK → Apply → OK
+
+**Verify:** Properties window should close without errors.
+
+***
+
+## 🔌 PART 6: MODIFY MAIN.CPP
+
+**Step 1: Find Main.cpp**
+
+In Solution Explorer, under ChaosMod project, locate `Main.cpp`
+
+Double-click to open it.
+
+**Step 2: Add includes at top**
+
+After existing includes (near top of file), add:
+
+```cpp
+#include "ExternalTrigger.h"
+#include "EffectDatabase.h"
+```
+
+**Step 3: Find initialization function**
+
+Search for a function that looks like initialization. Common names:
+- `DllMain` (if using DLL_PROCESS_ATTACH)
+- `OnInitialize`
+- `Initialize`
+- Somewhere that runs when mod loads
+
+**Step 4: Add initialization code**
+
+Inside that function, add these lines:
+
+```cpp
+// Initialize effect database
+EffectDatabase::InitializeRegistry();
+
+// Start external trigger server
+// TODO: Read port from config file, for now use 8080
+int externalPort = 8080;
+ExternalTrigger::Initialize(externalPort);
+
+LOG("External trigger system enabled on port " << externalPort);
+```
+
+**Step 5: Find shutdown function**
+
+Search for shutdown/cleanup function. Common names:
+- `DllMain` (DLL_PROCESS_DETACH case)
+- `OnShutdown`
+- `Shutdown`
+
+**Step 6: Add shutdown code**
+
+Inside that function, add:
+
+```cpp
+ExternalTrigger::Shutdown();
+```
+
+**Save Main.cpp**
+
+***
+
+## 🏗️ PART 7: BUILD THE PROJECT
+
+**Step 1: Select configuration**
+
+At the top of Visual Studio:
+- Configuration dropdown: Select **Release**
+- Platform dropdown: Select **x64**
+
+**Step 2: Build ChaosMod project only**
+
+Right-click **ChaosMod** project (in Solution Explorer) → Build
+
+**Watch the Output window** (View → Output if not visible)
+
+---
+
+## ✅ PART 8: VERIFY BUILD SUCCESS
+
+### Expected Output (Success):
+
+```
+1>------ Build started: Project: ChaosMod, Configuration: Release x64 ------
+1>ExternalTrigger.cpp
+1>EffectDatabase.cpp
+1>Main.cpp
+1>   Creating library bin\Release\ChaosMod.lib and object bin\Release\ChaosMod.exp
+1>Generating code
+1>Finished generating code
+1>ChaosMod.vcxproj -> C:\...\ChaosModV\bin\Release\ChaosMod.asi
+========== Build: 1 succeeded, 0 failed, 0 up-to-date, 0 skipped ==========
+```
+
+**Verify output file exists:**
+
+Check: `ChaosModV\bin\Release\ChaosMod.asi`
+
+File size should be ~1-2 MB.
+
+---
+
+### Common Build Errors & Fixes:
+
+#### Error: "Cannot open include file: 'httplib.h'"
+
+**Cause:** Include directory not set or file not downloaded.
+
+**Fix:**
+```powershell
+# Re-download
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/yhirose/cpp-httplib/master/httplib.h" -OutFile "vendor\httplib\httplib.h"
+
+# Re-check include directories in project properties
+```
+
+#### Error: "Cannot open include file: 'nlohmann/json.hpp'"
+
+**Fix:**
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/nlohmann/json/develop/single_include/nlohmann/json.hpp" -OutFile "vendor\nlohmann\json.hpp"
+```
+
+#### Error: "RegisteredEffect: undeclared identifier"
+
+**Cause:** EffectDatabase.h needs adjustment for actual Chaos Mod structure.
+
+**Fix:** You need to inspect the actual Chaos Mod source to find the correct class name for effects. Look in `Effects/` folder for examples.
+
+#### Error: Tons of "unresolved external symbol" errors
+
+**Cause:** EffectDatabase.cpp is empty (no effects registered).
+
+**This is expected** - you'll fill it with the Python generator later.
+
+***
+
+## 🧪 PART 9: INSTALL & TEST
+
+**Step 1: Copy to GTA V**
+
+```powershell
+# Copy built .asi
+Copy-Item "bin\Release\ChaosMod.asi" -Destination "C:\path\to\GTA V\scripts\" -Force
+
+# Copy config
+Copy-Item "config.ini" -Destination "C:\path\to\GTA V\scripts\" -Force
+```
+
+**Step 2: Verify ScriptHookV is installed**
+
+Check `GTA V\` folder has:
+- `ScriptHookV.dll`
+- `dinput8.dll`
+
+If missing, download from: http://www.dev-c.com/gtav/scripthookv/
+
+**Step 3: Start GTA V**
+
+Launch GTA V (NOT through FiveM yet).
+
+**Step 4: Check if HTTP server starts**
+
+Look for a log file:
+- `GTA V\scripts\chaos_mod.log`
+- OR `GTA V\chaosmod.log`
+
+Search for lines like:
+```
+[External Trigger] Initializing...
+[External Trigger] Starting HTTP server on 0.0.0.0:8080
+[External Trigger] HTTP server started successfully
+```
+
+**If you see these** → SUCCESS! ✅
+
+---
+
+## 🌐 PART 10: TEST HTTP SERVER
+
+**With GTA V running, open PowerShell:**
+
+```powershell
+# Test ping endpoint
+Invoke-WebRequest -Uri "http://localhost:8080/ping" -Method GET
+
+# Expected response: "pong"
+```
+
+**If it works:** Your HTTP server is running! ✅
+
+**If it fails:** Check Windows Firewall, or check logs for errors.
+
+***
+
+## 🔍 PART 11: VERIFY INTEGRATION CHECKLIST
+
+Run through this checklist:
+
+### Files Created:
+- [ ] `vendor\httplib\httplib.h` exists (~10k lines)
+- [ ] `vendor\nlohmann\json.hpp` exists (~25k lines)
+- [ ] `ChaosMod\ExternalTrigger.h` exists
+- [ ] `ChaosMod\ExternalTrigger.cpp` exists
+- [ ] `ChaosMod\EffectDatabase.h` exists
+- [ ] `ChaosMod\EffectDatabase.cpp` exists (even if empty)
+- [ ] `config.ini` exists
+
+### Visual Studio Project:
+- [ ] All 4 new files added to ChaosMod project
+- [ ] Include directories configured
+- [ ] Main.cpp modified with Initialize/Shutdown calls
+- [ ] Build succeeds (Release x64)
+- [ ] Output: `bin\Release\ChaosMod.asi` exists
+
+### GTA V Installation:
+- [ ] `ChaosMod.asi` copied to `GTA V\scripts\`
+- [ ] `config.ini` copied to `GTA V\scripts\`
+- [ ] ScriptHookV installed
+- [ ] GTA V launches without crashes
+
+### HTTP Server:
+- [ ] Log shows "HTTP server started successfully"
+- [ ] `http://localhost:8080/ping` returns "pong"
+- [ ] Port 8080 not blocked by firewall
+
+### FiveM Connection:
+- [ ] FiveM resource shows green dot (connected)
+- [ ] NUI console shows "Connected to Chaos Mod"
+- [ ] `/testchaos` command works
+
+***
+
+## 🚨 CRITICAL NOTES
+
+### Port Configuration (IMPORTANT!)
+
+Each of 4 players needs a **different port**:
+
+- Player 1: Port 8080 (config.ini: `Port=8080`)
+- Player 2: Port 8081 (config.ini: `Port=8081`)
+- Player 3: Port 8082 (config.ini: `Port=8082`)
+- Player 4: Port 8083 (config.ini: `Port=8083`)
+
+**AND** match in FiveM client config:
+- Player 1: `Config.ChaosPort = 8080`
+- Player 2: `Config.ChaosPort = 8081`
+- etc.
+
+***
+
+## 📊 TESTING PROCEDURE
+
+### Test 1: HTTP Server Only
+
+**Without FiveM:**
+
+1. Start GTA V
+2. Check logs for "HTTP server started"
+3. Test: `Invoke-WebRequest http://localhost:8080/ping`
+4. Expected: "pong" response
+
+✅ **Pass:** HTTP server works
+❌ **Fail:** Check firewall, check logs, check port not in use
+
+### Test 2: Effect Trigger (Manual)
+
+**With GTA V running:**
+
+```powershell
+# Trigger a test effect
+Invoke-RestMethod -Uri "http://localhost:8080/trigger" -Method POST -ContentType "application/json" -Body '{"effectId":"player_drunk","duration":10000}'
+```
+
+**Expected:**
+- Log shows: "Received: player_drunk"
+- **Effect might not apply yet** (EffectDatabase empty) but server should respond
+
+### Test 3: FiveM Integration
+
+**With GTA V + FiveM:**
+
+1. Connect to FiveM server
+2. Check NUI shows green dot
+3. Run `/startjourney`
+4. Wait for chaos effect trigger (every 30s)
+5. Check notification appears
+6. **Effect might not apply yet** (EffectDatabase empty)
+
+***
+
+## 🎯 WHAT'S NEXT?
+
+You now have:
+✅ HTTP server integrated into Chaos Mod
+✅ Compiling successfully
+✅ Installed in GTA V
+✅ Responding to HTTP requests
+
+**Still missing:**
+⚠️ EffectDatabase.cpp is empty (no effects registered)
+
+**Next step:** Run Python generator to fill EffectDatabase.cpp with all 350+ effect mappings.
+
+**After that:** Rebuild, reinstall, and effects will actually work!
+
+***
+
+**Did the build succeed? Can you access http://localhost:8080/ping?**

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; background: transparent; }
+        #menu {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            background: black;
+            border: 3px solid lime;
+            padding: 20px;
+            color: white;
+            font-family: Arial;
+        }
+        #menu.show { display: block; }
+        h1 { text-align: center; color: lime; }
+        .section { margin: 15px 0; border-top: 1px solid #333; padding-top: 10px; }
+        .section h3 { color: yellow; margin: 5px 0; }
+        .btn {
+            background: green;
+            color: white;
+            padding: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+            text-align: center;
+            border-radius: 5px;
+        }
+        .btn:hover { background: darkgreen; }
+        .btn.red { background: darkred; }
+        .btn.red:hover { background: red; }
+        .type-btn {
+            background: #444;
+            padding: 8px;
+            margin: 3px 0;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .type-btn:hover { background: #666; }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <h1>🐆 COUGAR JOURNEY</h1>
+        
+        <div class="section">
+            <h3>Journey Control</h3>
+            <div class="btn" onclick="send('start')">▶️ START JOURNEY</div>
+            <div class="btn btn.red" onclick="send('stop')">⏹️ STOP JOURNEY</div>
+        </div>
+        
+        <div class="section">
+            <h3>Spawn Cougars</h3>
+            <div class="btn" onclick="send('spawn')">🐆 SPAWN 3 RANDOM</div>
+            <div class="type-btn" onclick="spawnType('normal')">Normal (Basic)</div>
+            <div class="type-btn" onclick="spawnType('shooter')">🔫 Shooter</div>
+            <div class="type-btn" onclick="spawnType('blueBall')">🔵 Blue Ball (Launch)</div>
+            <div class="type-btn" onclick="spawnType('purpleBall')">🟣 Purple Ball (BIG Launch)</div>
+            <div class="type-btn" onclick="spawnType('barrier')">🚧 Barrier (Reverse)</div>
+            <div class="type-btn" onclick="spawnType('health')">❤️ Health Drop</div>
+            <div class="type-btn" onclick="spawnType('armor')">🛡️ Armor Drop</div>
+            <div class="type-btn" onclick="spawnType('ammo')">📦 Ammo Drop</div>
+            <div class="type-btn" onclick="spawnType('jesus')">✝️ Jesus (Tank)</div>
+            <div class="type-btn" onclick="spawnType('beeper')">💣 Beeper (Bomb)</div>
+        </div>
+        
+        <div class="section">
+            <h3>Events</h3>
+            <div class="btn" onclick="send('cropduster')">✈️ SPAWN CROPDUSTER</div>
+            <div class="btn" onclick="send('chaos')">💥 TRIGGER CHAOS</div>
+        </div>
+
+        <div class="section">
+            <h3>Debug Tools</h3>
+            <div class="btn" onclick="send('spawnCar')">🚗 SPAWN CAR</div>
+            <div class="btn" onclick="send('heal')">💚 HEAL + ARMOR</div>
+            <div class="btn" onclick="send('clearCougars')">🧹 CLEAR ALL COUGARS</div>
+        </div>
+        
+        <p style="text-align:center; color:#888;">F6 or ESC to close</p>
+    </div>
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        window.addEventListener('message', (event) => {
+            if (event.data.action === 'toggle') {
+                document.getElementById('menu').className = event.data.show ? 'show' : '';
+            }
+        });
+        
+        function send(action) {
+            $.post(`https://cougars/${action}`, JSON.stringify({}));
+        }
+        
+        function spawnType(type) {
+            $.post(`https://cougars/spawnType`, JSON.stringify({type: type}));
+        }
+    </script>
+</body>
+</html>

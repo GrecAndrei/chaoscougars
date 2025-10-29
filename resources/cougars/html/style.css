@@ -1,0 +1,141 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #ffffff;
+    overflow: hidden;
+}
+
+#hud-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.panel {
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 15px;
+    min-width: 300px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.panel-header {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    text-align: center;
+    color: #00ff88;
+    text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 10px 0;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 5px;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #cccccc;
+}
+
+.stat-value {
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.progress-bar-container {
+    position: relative;
+    width: 150px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #00ff88, #00cc66);
+    width: 0%;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+}
+
+.player-item {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    margin: 5px 0;
+    background: rgba(255, 255, 255, 0.05);
+    border-left: 3px solid #00ff88;
+    border-radius: 5px;
+}
+
+.player-name {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.player-stats {
+    display: flex;
+    gap: 15px;
+    font-size: 12px;
+    color: #cccccc;
+}
+
+.player-stat {
+    display: flex;
+    gap: 5px;
+}
+
+.health-bar, .ammo-bar {
+    width: 100px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 5px;
+}
+
+.health-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ff0000, #ff6600);
+    transition: width 0.3s ease;
+}
+
+.ammo-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ffaa00, #ffdd00);
+    transition: width 0.3s ease;
+}
+
+.player-dead {
+    opacity: 0.5;
+    border-left-color: #ff0000;
+}

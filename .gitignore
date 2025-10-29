@@ -1,0 +1,26 @@
+# FiveM cache and runtime artifacts
+cache/
+*/cache/
+
+# Build directories
+build/
+*/build/
+ChaosModV-master/build/
+ChaosModV-master/bin/
+ChaosModV-master/*/bin/
+ChaosModV-master/*/obj/
+
+# Vendor compiled outputs
+vendor/shv/bin/
+vendor/minhook/bin/
+
+# Archives and temporary files
+*.zip
+*.7z
+*.log
+*.tmp
+*.bak
+
+# OS-specific cruft
+.DS_Store
+Thumbs.db

@@ -135,13 +135,26 @@ Citizen.CreateThread(function()
                 local isDead = IsEntityDead(ped)
                 local health = math.floor(GetEntityHealth(ped))
 
-                if not isDead and lastRecordedHealth and health < lastRecordedHealth then
+                if lastRecordedHealth and health < lastRecordedHealth then
                     local delta = lastRecordedHealth - health
                     if delta > 0 then
-                        local newHealth = math.floor(lastRecordedHealth - delta * 0.3)
-                        if newHealth < 1 then newHealth = 1 end
-                        SetEntityHealth(ped, newHealth)
-                        health = newHealth
+                        local retention = animalDamageScale
+                        local targetHealth = math.floor(lastRecordedHealth - delta * retention)
+                        if targetHealth < 1 then targetHealth = 1 end
+
+                        if isDead then
+                            local coords = GetEntityCoords(ped)
+                            local heading = GetEntityHeading(ped)
+                            NetworkResurrectLocalPlayer(coords.x, coords.y, coords.z + 0.5, heading, true, false)
+                            SetEntityHealth(ped, targetHealth)
+                            ClearPedTasksImmediately(ped)
+                            ClearPedSecondaryTask(ped)
+                            SetEntityInvincible(ped, debugState.enabled and debugState.godMode or false)
+                            isDead = false
+                        else
+                            SetEntityHealth(ped, targetHealth)
+                        end
+                        health = targetHealth
                     end
                 end
 

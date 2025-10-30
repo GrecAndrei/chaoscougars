@@ -14,4 +14,5 @@
 - Locked journey start/finish to deterministic spawn & destination points to avoid unpredictable teleports.
 - Hardened respawn flow by forcing local resurrection, clearing freeze states, and restoring loadouts with spawn invulnerability.
 - Scaled down animal bite damage globally during journeys via `WEAPON_ANIMAL` modifiers to keep cougars lethal but survivable.
+- Added client-side health scaler that resurrects the player if a cougar bite would be fatal, preserving the 70% damage reduction guarantee.
 - Reattached ability props for all clients on replicated cougars so visual cues stay in sync with their abilities.

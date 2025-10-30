@@ -25,13 +25,16 @@ RegisterCommand('startjourney', function(source, args, rawCommand)
             position = vector3(coords.x, coords.y, coords.z),
             deaths = 0,
             health = GetEntityHealth(playerPed),
-            isDead = false
+            isDead = false,
+            eliminated = false
         }
     end
     RefreshSpawnController()
     
     -- Notify all clients
     TriggerClientEvent('cougar:journeyStarted', -1)
+    TriggerClientEvent('cougar:stopSpectate', -1)
+    TriggerClientEvent('cougar:debugState', -1, JourneySession.debug)
     
     print('^2[Cougar Journey] Session started with ' .. GetPlayerCount() .. ' players^7')
 end, false)
@@ -92,9 +95,11 @@ AddEventHandler('cougar:updatePosition', function(position)
             position = pos,
             deaths = 0,
             health = 0,
-            isDead = false
+            isDead = false,
+            eliminated = false
         }
         RefreshSpawnController()
+        TriggerClientEvent('cougar:debugState', src, JourneySession.debug)
     else
         JourneySession.players[src].position = pos
     end
@@ -107,12 +112,20 @@ AddEventHandler('cougar:playerDied', function()
     
     if not JourneySession.active then return end
     if not JourneySession.players[src] then return end
-    
-    JourneySession.teamDeaths = JourneySession.teamDeaths + 1
-    JourneySession.players[src].deaths = JourneySession.players[src].deaths + 1
-    
-    -- Check for game over
-    if JourneySession.teamDeaths >= Config.MaxTeamDeaths then
+
+    local playerData = JourneySession.players[src]
+    local debug = JourneySession.debug or {}
+
+    playerData.deaths = playerData.deaths + 1
+    playerData.isDead = true
+
+    if debug.infiniteDeaths then
+        TriggerClientEvent('cougar:playerEliminated', src, false)
+    else
+        JourneySession.teamDeaths = JourneySession.teamDeaths + 1
+    end
+
+    if not debug.infiniteDeaths and JourneySession.teamDeaths >= Config.MaxTeamDeaths then
         TriggerClientEvent('cougar:gameOver', -1, 'deaths')
         
         -- Reset after 10 seconds
@@ -122,6 +135,20 @@ AddEventHandler('cougar:playerDied', function()
     else
         -- Notify team
         TriggerClientEvent('cougar:deathUpdate', -1, JourneySession.teamDeaths, Config.MaxTeamDeaths)
+    end
+
+    if debug.infiniteDeaths then
+        TriggerClientEvent('cougar:deathUpdate', -1, JourneySession.teamDeaths, Config.MaxTeamDeaths)
+    end
+
+    if not debug.infiniteDeaths and playerData.deaths >= Config.MaxDeathsPerPlayer then
+        playerData.eliminated = true
+        TriggerClientEvent('cougar:playerEliminated', -1, src, true)
+        local target = GetNearestAlivePlayer(src)
+        RefreshSpawnController()
+        TriggerClientEvent('cougar:startSpectate', src, target and (tonumber(target) or target) or nil)
+    else
+        TriggerClientEvent('cougar:playerEliminated', -1, src, false)
     end
 end)
 

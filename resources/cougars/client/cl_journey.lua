@@ -24,94 +24,71 @@ Citizen.CreateThread(function()
                             -- BLUE BALL
                             if data.type == 'blueBall' then
                                 if not data.abilityUsed then
+                                    data.abilityUsed = true
                                     print('^3>>> BLUE BALL LAUNCHING <<<^7')
-                                    
-                                    -- Ragdoll first
                                     SetPedToRagdoll(playerPed, 1500, 1500, 0, false, false, false)
-                                    
-                                    Wait(100)
-                                    
-                                    -- CRITICAL: Apply velocity directly
-                                    local vel = GetEntityVelocity(playerPed)
-                                    SetEntityVelocity(playerPed, vel.x, vel.y, vel.z + 15.0)
-                                    
                                     PlaySoundFrontend(-1, "CHECKPOINT_PERFECT", "HUD_MINI_GAME_SOUNDSET", true)
-                                    
+                                    SetEntityVelocity(playerPed, 0.0, 0.0, 15.0)
+
                                     if data.prop and DoesEntityExist(data.prop) then
-                                        DetachEntity(data.prop, true, true)
-                                        SetEntityVelocity(data.prop, 0.0, 0.0, 5.0)
+                                        local coords = GetEntityCoords(data.prop)
+                                        PlaySoundFromCoord(-1, "GOLF_BALL_TIMER", coords.x, coords.y, coords.z, nil, false, 0, false)
+                                        AddExplosion(coords.x, coords.y, coords.z, 2, 0.0, false, true, 0.0)
+                                        DeleteEntity(data.prop)
                                         data.prop = nil
                                     end
 
-                                    data.abilityUsed = true
-                                    data.reportedDead = true
                                     TriggerServerEvent('cougar:died', netId, data.type)
-                                    if DoesEntityExist(data.entity) then
-                                        SetEntityHealth(data.entity, 0)
+                                    if data.entity and DoesEntityExist(data.entity) then
                                         DeleteEntity(data.entity)
                                     end
                                     localCougars[netId] = nil
                                 end
                             end
-                            
-                            -- PURPLE BALL
+
                             if data.type == 'purpleBall' then
                                 if not data.abilityUsed then
+                                    data.abilityUsed = true
                                     print('^5>>> PURPLE BALL MEGA LAUNCHING <<<^7')
-                                    
                                     SetPedToRagdoll(playerPed, 3000, 3000, 0, false, false, false)
-                                    
-                                    Wait(100)
-                                    
-                                    local vel = GetEntityVelocity(playerPed)
-                                    SetEntityVelocity(playerPed, vel.x, vel.y, vel.z + 35.0)
-                                    
                                     StartScreenEffect("RaceTurbo", 2000, false)
                                     PlaySoundFrontend(-1, "FLIGHT_TURBULENCE_MASTER", "HUD_AWARDS", true)
-                                    
+                                    SetEntityVelocity(playerPed, 0.0, 0.0, 35.0)
+
                                     if data.prop and DoesEntityExist(data.prop) then
-                                        DetachEntity(data.prop, true, true)
-                                        SetEntityVelocity(data.prop, 0.0, 0.0, 8.0)
+                                        local coords = GetEntityCoords(data.prop)
+                                        AddExplosion(coords.x, coords.y, coords.z, 2, 0.0, false, true, 0.0)
+                                        DeleteEntity(data.prop)
                                         data.prop = nil
                                     end
 
-                                    data.abilityUsed = true
-                                    data.reportedDead = true
                                     TriggerServerEvent('cougar:died', netId, data.type)
-                                    if DoesEntityExist(data.entity) then
-                                        SetEntityHealth(data.entity, 0)
+                                    if data.entity and DoesEntityExist(data.entity) then
                                         DeleteEntity(data.entity)
                                     end
                                     localCougars[netId] = nil
                                 end
                             end
-                            
-                            -- BARRIER
+
                             if data.type == 'barrier' then
                                 if not data.abilityUsed then
+                                    data.abilityUsed = true
                                     print('^6>>> BARRIER REVERSING <<<^7')
-                                    
                                     local vel = GetEntityVelocity(playerPed)
-                                    
                                     SetPedToRagdoll(playerPed, 1000, 1000, 0, false, false, false)
-                                    
                                     Wait(50)
-                                    
-                                    -- Reverse velocity
                                     SetEntityVelocity(playerPed, -vel.x * 2.5, -vel.y * 2.5, 5.0)
-                                    
                                     PlaySoundFrontend(-1, "CHECKPOINT_UNDER_THE_BRIDGE", "HUD_MINI_GAME_SOUNDSET", true)
-                                    
+
                                     if data.prop and DoesEntityExist(data.prop) then
-                                        DetachEntity(data.prop, true, true)
+                                        local coords = GetEntityCoords(data.prop)
+                                        AddExplosion(coords.x, coords.y, coords.z, 2, 0.0, false, true, 0.0)
+                                        DeleteEntity(data.prop)
                                         data.prop = nil
                                     end
 
-                                    data.abilityUsed = true
-                                    data.reportedDead = true
                                     TriggerServerEvent('cougar:died', netId, data.type)
-                                    if DoesEntityExist(data.entity) then
-                                        SetEntityHealth(data.entity, 0)
+                                    if data.entity and DoesEntityExist(data.entity) then
                                         DeleteEntity(data.entity)
                                     end
                                     localCougars[netId] = nil
@@ -153,3 +130,8 @@ Citizen.CreateThread(function()
 end)
 
 print('^2[Effects] Collision-based effects loaded^7')
+RegisterNetEvent('cougar:gameOver')
+AddEventHandler('cougar:gameOver', function(reason)
+    NetworkEndSpectatorMode()
+    FreezeEntityPosition(PlayerPedId(), false)
+end)

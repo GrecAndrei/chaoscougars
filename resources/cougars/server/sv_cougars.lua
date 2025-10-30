@@ -1,3 +1,23 @@
+local function ensureModel(hash)
+    if type(hash) ~= 'number' then
+        hash = GetHashKey(hash)
+    end
+
+    if not IsModelInCdimage(hash) then
+        return false
+    end
+
+    Citizen.InvokeNative(0x963D27A58DF860AC, hash)
+    local timeout = GetGameTimer() + 5000
+    while not HasModelLoaded(hash) do
+        Wait(50)
+        if GetGameTimer() > timeout then
+            return false
+        end
+    end
+    return true
+end
+
 -- Weighted Random Selection
 function SelectCougarType()
     -- Calculate total weight
@@ -69,8 +89,14 @@ Citizen.CreateThread(function()
                     print(string.format('^2[Server] Spawning %s cougar via controller %s^7', typeName, controller))
                     TriggerClientEvent('cougar:spawnRequest', controller, spawnPos, typeName, typeData)
                 else
-                    print('^1[Server] No controller available - broadcasting cougar spawn^7')
-                    TriggerClientEvent('cougar:spawnRequest', -1, spawnPos, typeName, typeData)
+                    local players = GetPlayers()
+                    if #players > 0 then
+                        local fallback = tonumber(players[1]) or players[1]
+                        print('^3[Server] No controller - using fallback player ' .. tostring(fallback) .. '^7')
+                        TriggerClientEvent('cougar:spawnRequest', fallback, spawnPos, typeName, typeData)
+                    else
+                        print('^1[Server] Unable to spawn cougar - no fallback player available^7')
+                    end
                 end
             end
         end
@@ -165,9 +191,9 @@ function SpawnCropduster()
     
     -- Load plane model first (CRITICAL IN FIVEM)
     local planeHash = GetHashKey('duster')
-    RequestModel(planeHash)
-    while not HasModelLoaded(planeHash) do
-        Wait(100)
+    if not ensureModel(planeHash) then
+        print('^1[Cropduster] Failed to load plane model^7')
+        return
     end
     
     -- Spawn plane
@@ -197,9 +223,9 @@ function SpawnCropduster()
         local cougarHash = GetHashKey(typeData.model)
         
         -- Request model first (CRITICAL IN FIVEM)
-        RequestModel(cougarHash)
-        while not HasModelLoaded(cougarHash) do
-            Wait(100)
+        if not ensureModel(cougarHash) then
+            print('^1[Cropduster] Failed to load cougar model^7')
+            break
         end
         
         local cougar = CreatePed(4, cougarHash, spawnPos.x, spawnPos.y, spawnPos.z, 0.0, true, true)
@@ -356,4 +382,3 @@ Citizen.CreateThread(function()
             end
         end
     end
-end)

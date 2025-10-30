@@ -8,7 +8,12 @@ JourneySession = {
     cougars = {}, -- {[netId] = {type = 'normal', entity = id, position = vec3}}
     lastSpawnTime = 0,
     lastCropDusterTime = 0,
-    spawnController = nil
+    spawnController = nil,
+    debug = {
+        enabled = Config.DebugDefaults.enabled,
+        godMode = Config.DebugDefaults.godMode,
+        infiniteDeaths = Config.DebugDefaults.infiniteDeaths
+    }
 }
 
 -- Utility Functions
@@ -46,11 +51,61 @@ function GetDifficultyMultiplier()
     return 1.0
 end
 
+function GetNearestAlivePlayer(exclude)
+    local nearest = nil
+    local nearestDist = math.huge
+    local excludeId = tonumber(exclude) or exclude
+    local reference = JourneySession.players[excludeId]
+    local origin = reference and reference.position
+    if not origin then
+        local ped = GetPlayerPed(excludeId)
+        if ped ~= 0 and DoesEntityExist(ped) then
+            local coords = GetEntityCoords(ped)
+            origin = vector3(coords.x, coords.y, coords.z)
+        end
+    end
+
+    for playerId, data in pairs(JourneySession.players) do
+        if playerId ~= excludeId and not data.eliminated then
+            local ped = GetPlayerPed(playerId)
+            if ped ~= 0 and DoesEntityExist(ped) and not IsEntityDead(ped) then
+                local pos = data.position
+                if not pos then
+                    local coords = GetEntityCoords(ped)
+                    pos = vector3(coords.x, coords.y, coords.z)
+                end
+
+                local distance = math.huge
+                if origin and pos then
+                    distance = #(pos - origin)
+                end
+
+                if distance < nearestDist then
+                    nearestDist = distance
+                    nearest = tonumber(playerId) or playerId
+                end
+            end
+        end
+    end
+
+    if not nearest then
+        for playerId, data in pairs(JourneySession.players) do
+            if playerId ~= excludeId and not (data and data.eliminated) then
+                nearest = tonumber(playerId) or playerId
+                break
+            end
+        end
+    end
+
+    return nearest
+end
+
 function RefreshSpawnController()
     local bestKey = nil
     local bestNumeric = nil
 
-    for playerId, _ in pairs(JourneySession.players) do
+    for playerId, data in pairs(JourneySession.players) do
+        if data and data.eliminated then goto continue end
         local numericId = tonumber(playerId) or playerId
         local ped = GetPlayerPed(numericId)
         if ped ~= 0 and DoesEntityExist(ped) then
@@ -64,6 +119,7 @@ function RefreshSpawnController()
                 bestKey = numericId
             end
         end
+        ::continue::
     end
 
     JourneySession.spawnController = bestKey
@@ -74,6 +130,12 @@ function GetSpawnController()
     if not JourneySession.active then return nil end
 
     local controller = JourneySession.spawnController
+    if controller then
+        local data = JourneySession.players[controller] or JourneySession.players[tostring(controller)]
+        if data and data.eliminated then
+            controller = nil
+        end
+    end
     if controller then
         local ped = GetPlayerPed(controller)
         if ped ~= 0 and DoesEntityExist(ped) then
@@ -119,8 +181,14 @@ AddEventHandler('cougar:menuAction', function(action)
                 print(string.format('^2[Menu] Requesting %s cougar via controller %s^7', typeName or 'normal', tostring(controller)))
                 TriggerClientEvent('cougar:spawnRequest', controller, center, typeName or 'normal', typeData or Config.CougarTypes.normal)
             else
-                print('^1[Menu] No controller available - broadcasting spawn request^7')
-                TriggerClientEvent('cougar:spawnRequest', -1, center, typeName or 'normal', typeData or Config.CougarTypes.normal)
+                local players = GetPlayers()
+                if #players > 0 then
+                    local fallback = tonumber(players[1]) or players[1]
+                    print('^3[Menu] No controller - using fallback player ' .. tostring(fallback) .. '^7')
+                    TriggerClientEvent('cougar:spawnRequest', fallback, center, typeName or 'normal', typeData or Config.CougarTypes.normal)
+                else
+                    print('^1[Menu] No players available to spawn cougars^7')
+                end
             end
         end
         
@@ -135,6 +203,38 @@ AddEventHandler('cougar:menuAction', function(action)
             TriggerSyncedChaosEffect(effect, 20000)
             print('^2[Menu] Chaos: ' .. effect .. '^7')
         end
+    elseif action == 'toggleDebug' then
+        JourneySession.debug.enabled = not JourneySession.debug.enabled
+        if not JourneySession.debug.enabled then
+            JourneySession.debug.godMode = false
+            JourneySession.debug.infiniteDeaths = false
+        end
+        TriggerClientEvent('cougar:debugState', -1, JourneySession.debug)
+        print(string.format('^2[Debug] Debug mode %s^7', JourneySession.debug.enabled and 'enabled' or 'disabled'))
+    elseif action == 'toggleDebugGod' then
+        if not JourneySession.debug.enabled then
+            print('^1[Debug] Enable debug mode first^7')
+            return
+        end
+        JourneySession.debug.godMode = not JourneySession.debug.godMode
+        TriggerClientEvent('cougar:debugState', -1, JourneySession.debug)
+        print(string.format('^2[Debug] God mode %s^7', JourneySession.debug.godMode and 'enabled' or 'disabled'))
+    elseif action == 'toggleDebugDeaths' then
+        if not JourneySession.debug.enabled then
+            print('^1[Debug] Enable debug mode first^7')
+            return
+        end
+        JourneySession.debug.infiniteDeaths = not JourneySession.debug.infiniteDeaths
+        TriggerClientEvent('cougar:debugState', -1, JourneySession.debug)
+        if JourneySession.debug.infiniteDeaths then
+            for playerId, data in pairs(JourneySession.players) do
+                data.eliminated = false
+                local serverId = tonumber(playerId) or playerId
+                TriggerClientEvent('cougar:playerEliminated', -1, serverId, false)
+                TriggerClientEvent('cougar:stopSpectate', serverId)
+            end
+        end
+        print(string.format('^2[Debug] Unlimited deaths %s^7', JourneySession.debug.infiniteDeaths and 'enabled' or 'disabled'))
     end
 end)
 
@@ -154,8 +254,14 @@ AddEventHandler('cougar:spawnSpecificType', function(typeName)
         print(string.format('^2[Menu] Requesting %s cougar via controller %s^7', typeName, tostring(controller)))
         TriggerClientEvent('cougar:spawnRequest', controller, center, typeName, typeData)
     else
-        print('^1[Menu] No controller available - broadcasting spawn request^7')
-        TriggerClientEvent('cougar:spawnRequest', -1, center, typeName, typeData)
+        local players = GetPlayers()
+        if #players > 0 then
+            local fallback = tonumber(players[1]) or players[1]
+            print('^3[Menu] No controller - using fallback player ' .. tostring(fallback) .. '^7')
+            TriggerClientEvent('cougar:spawnRequest', fallback, center, typeName, typeData)
+        else
+            print('^1[Menu] No players available to spawn cougars^7')
+        end
     end
     
     print('^2[Menu] Spawned ' .. typeName .. ' cougar^7')
@@ -189,7 +295,8 @@ AddEventHandler('cougar:requestTeamInfo', function()
             name = GetPlayerName(serverId),
             deaths = playerData.deaths,
             health = playerData.health or 0,
-            isDead = playerData.isDead or false
+            isDead = playerData.isDead or false,
+            eliminated = playerData.eliminated or false
         }
     end
     
@@ -201,9 +308,17 @@ AddEventHandler('cougar:requestRespawnLocation', function()
     local src = source
     
     if not JourneySession.active then return end
+    local playerData = JourneySession.players[src] or JourneySession.players[tostring(src)]
+    if playerData and playerData.eliminated and not JourneySession.debug.infiniteDeaths then
+        return
+    end
     
     local center = GetTeamCenter()
     
+    if playerData then
+        playerData.isDead = false
+    end
+    TriggerClientEvent('cougar:stopSpectate', src)
     TriggerClientEvent('cougar:respawnAt', src, center)
 end)
 

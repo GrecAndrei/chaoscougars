@@ -1,7 +1,9 @@
 local spawnPoint = nil
 local destinationPoint = nil
 local INVULN_DURATION_MS = 4000
-
+local isEliminated = false
+local isSpectating = false
+local currentSpectateTarget = nil
 local function placePedSafely(ped, coords)
     if not DoesEntityExist(ped) then return end
 
@@ -40,6 +42,9 @@ end
 -- Set spawn and destination on journey start
 RegisterNetEvent('cougar:journeyStarted')
 AddEventHandler('cougar:journeyStarted', function()
+    isEliminated = false
+    isSpectating = false
+    currentSpectateTarget = nil
     if destinationPoint and destinationPoint.blip and DoesBlipExist(destinationPoint.blip) then
         RemoveBlip(destinationPoint.blip)
     end
@@ -83,6 +88,68 @@ AddEventHandler('cougar:journeyStopped', function()
     if destinationPoint and destinationPoint.blip and DoesBlipExist(destinationPoint.blip) then
         RemoveBlip(destinationPoint.blip)
     end
+    NetworkSetInSpectatorMode(false, 0)
+    isSpectating = false
+    currentSpectateTarget = nil
+    isEliminated = false
+    if destinationPoint then
+        destinationPoint.blip = nil
+    end
+end)
+
+RegisterNetEvent('cougar:playerEliminated')
+AddEventHandler('cougar:playerEliminated', function(serverId, state)
+    if (tonumber(serverId) or serverId) == GetPlayerServerId(PlayerId()) then
+        isEliminated = state
+        if not state then
+            NetworkSetInSpectatorMode(false, 0)
+            FreezeEntityPosition(PlayerPedId(), false)
+            isSpectating = false
+        end
+    end
+end)
+
+RegisterNetEvent('cougar:startSpectate')
+AddEventHandler('cougar:startSpectate', function(targetServerId)
+    local ped = PlayerPedId()
+    FreezeEntityPosition(ped, true)
+    isSpectating = true
+    currentSpectateTarget = targetServerId
+
+    if targetServerId then
+        local targetPlayer = GetPlayerFromServerId(targetServerId)
+        if targetPlayer ~= -1 then
+            NetworkSetInSpectatorMode(true, GetPlayerPed(targetPlayer))
+        end
+    else
+        NetworkSetInSpectatorMode(true, ped)
+    end
+end)
+
+RegisterNetEvent('cougar:stopSpectate')
+AddEventHandler('cougar:stopSpectate', function()
+    local ped = PlayerPedId()
+    NetworkSetInSpectatorMode(false, 0)
+    FreezeEntityPosition(ped, false)
+    isSpectating = false
+    currentSpectateTarget = nil
+end)
+
+RegisterNetEvent('cougar:gameOver')
+AddEventHandler('cougar:gameOver', function(reason)
+    local ped = PlayerPedId()
+    NetworkSetInSpectatorMode(false, 0)
+    FreezeEntityPosition(ped, false)
+    isSpectating = false
+    currentSpectateTarget = nil
+    isEliminated = false
+end)
+
+RegisterNetEvent('cougar:debugState')
+AddEventHandler('cougar:debugState', function(state)
+    if state and state.infiniteDeaths then
+        isEliminated = false
+    end
 end)
 
 -- Custom respawn on death
@@ -90,17 +157,18 @@ Citizen.CreateThread(function()
     while true do
         Wait(500)
         
-        if journeyActive then
+        if journeyActive and not isSpectating then
             local playerPed = PlayerPedId()
-            
+
             if IsEntityDead(playerPed) then
                 -- Wait for respawn
                 while IsEntityDead(playerPed) do
                     Wait(100)
                 end
                 
-                -- Respawn at team center
-                TriggerServerEvent('cougar:requestRespawnLocation')
+                if not isEliminated then
+                    TriggerServerEvent('cougar:requestRespawnLocation')
+                end
             end
         end
     end

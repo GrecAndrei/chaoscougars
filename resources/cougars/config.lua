@@ -2,6 +2,7 @@ Config = {}
 
 -- Journey Settings
 Config.MaxTeamDeaths = 2
+Config.MaxDeathsPerPlayer = 1
 Config.RubberBandRadius = 600.0 -- meters
 Config.PositionUpdateRate = 100 -- ms
 
@@ -11,6 +12,12 @@ Config.SpawnDistance = {min = 50, max = 100} -- meters from team center
 Config.SpawnInterval = 8 -- seconds
 Config.DespawnDistance = 300  -- Changed from 200 to 300
 Config.MaxCougarLifetime = 300 -- 5 minutes max per cougar
+
+Config.DebugDefaults = {
+    enabled = false,
+    godMode = false,
+    infiniteDeaths = false
+}
 
 -- Cougar Type Spawn Weights (must sum to 1.0)
 Config.CougarTypes = {

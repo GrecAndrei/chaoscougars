@@ -7,6 +7,9 @@ local journeyDefenseModifier = 0.3
 local invulnDurationMs = 4000
 local journeyRunMultiplier = 1.1
 
+local lastRecordedHealth = nil
+local debugState = Config.DebugDefaults or {enabled = false, godMode = false, infiniteDeaths = false}
+
 local function applyJourneyLoadout()
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then return end
@@ -21,6 +24,7 @@ local function applyJourneyLoadout()
     local weapon = GetHashKey('WEAPON_APPISTOL')
     GiveWeaponToPed(ped, weapon, 40, false, true)
     SetCurrentPedWeapon(ped, weapon, true)
+    lastRecordedHealth = GetEntityHealth(ped)
 end
 
 RegisterNetEvent('cougar:journeyStarted')
@@ -35,12 +39,15 @@ AddEventHandler('cougar:journeyStarted', function()
     if DoesEntityExist(ped) then
         applyJourneyLoadout()
         SetEntityInvincible(ped, true)
-        Citizen.SetTimeout(invulnDurationMs, function()
-            if journeyActive then
-                SetEntityInvincible(ped, false)
-            end
-        end)
+        if not (debugState.enabled and debugState.godMode) then
+            Citizen.SetTimeout(invulnDurationMs, function()
+                if journeyActive and not (debugState.enabled and debugState.godMode) then
+                    SetEntityInvincible(ped, false)
+                end
+            end)
+        end
     end
+    lastRecordedHealth = GetEntityHealth(PlayerPedId())
 end)
 
 RegisterNetEvent('cougar:journeyStopped')
@@ -49,7 +56,7 @@ AddEventHandler('cougar:journeyStopped', function()
     TriggerEvent('cougar:stopMission')
     lastDeathState = false
     local ped = PlayerPedId()
-    if DoesEntityExist(ped) then
+    if DoesEntityExist(ped) and not (debugState.enabled and debugState.godMode) then
         SetEntityInvincible(ped, false)
     end
 
@@ -57,11 +64,32 @@ AddEventHandler('cougar:journeyStopped', function()
     SetPlayerMeleeWeaponDefenseModifier(playerId, defaultMeleeDefense)
     SetRunSprintMultiplierForPlayer(playerId, 1.0)
     SetSwimMultiplierForPlayer(playerId, 1.0)
+    lastRecordedHealth = nil
 end)
 
 RegisterNetEvent('cougar:setPlayerSkills')
 AddEventHandler('cougar:setPlayerSkills', function()
     applyJourneyLoadout()
+end)
+
+RegisterNetEvent('cougar:debugState')
+AddEventHandler('cougar:debugState', function(state)
+    debugState = state or debugState
+    local ped = PlayerPedId()
+    if DoesEntityExist(ped) then
+        lastRecordedHealth = GetEntityHealth(ped)
+    end
+    if journeyActive then
+        if debugState.enabled and debugState.godMode then
+            SetEntityInvincible(ped, true)
+        elseif not IsEntityDead(ped) then
+            SetEntityInvincible(ped, false)
+        end
+    else
+        if not (debugState.enabled and debugState.godMode) then
+            SetEntityInvincible(ped, false)
+        end
+    end
 end)
 
 AddEventHandler('onClientResourceStop', function(resourceName)
@@ -72,7 +100,9 @@ AddEventHandler('onClientResourceStop', function(resourceName)
         SetSwimMultiplierForPlayer(playerId, 1.0)
         local ped = PlayerPedId()
         if DoesEntityExist(ped) then
-            SetEntityInvincible(ped, false)
+            if not (debugState.enabled and debugState.godMode) then
+                SetEntityInvincible(ped, false)
+            end
         end
     end
 end)
@@ -92,6 +122,18 @@ Citizen.CreateThread(function()
 
                 local isDead = IsEntityDead(ped)
                 local health = math.floor(GetEntityHealth(ped))
+
+                if not isDead and lastRecordedHealth and health < lastRecordedHealth then
+                    local delta = lastRecordedHealth - health
+                    if delta > 0 then
+                        local newHealth = math.floor(lastRecordedHealth - delta * 0.3)
+                        if newHealth < 1 then newHealth = 1 end
+                        SetEntityHealth(ped, newHealth)
+                        health = newHealth
+                    end
+                end
+
+                lastRecordedHealth = health
 
                 TriggerServerEvent('cougar:updatePlayerStatus', health, isDead)
 

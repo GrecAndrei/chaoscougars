@@ -79,6 +79,16 @@ AddEventHandler('cougar:teamUpdate', function(teamData)
     teamMembers = teamData
 end)
 
+RegisterNetEvent('cougar:playerEliminated')
+AddEventHandler('cougar:playerEliminated', function(serverId, state)
+    if teamMembers then
+        local key = tostring(tonumber(serverId) or serverId)
+        if teamMembers[key] then
+            teamMembers[key].eliminated = state
+        end
+    end
+end)
+
 RegisterNetEvent('cougar:distanceUpdate')
 AddEventHandler('cougar:distanceUpdate', function(distKm)
     myStats.distanceTraveled = distKm
@@ -218,7 +228,15 @@ Citizen.CreateThread(function()
                     
                     if data.isDead then hr, hg, hb = 150, 150, 150 end
                     
-                    local status = data.isDead and "[DEAD]" or ("[" .. data.health .. "%]")
+                    local status
+                    if data.eliminated then
+                        status = "[OUT]"
+                        hr, hg, hb = 200, 200, 200
+                    elseif data.isDead then
+                        status = "[DEAD]"
+                    else
+                        status = "[" .. data.health .. "%]"
+                    end
                     local nameShort = string.sub(data.name, 1, 10)
                     
                     DrawCleanText(nameShort .. " " .. status, leftX, y, 0.28, 4, hr, hg, hb, 255, false)

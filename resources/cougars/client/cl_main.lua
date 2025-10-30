@@ -6,6 +6,9 @@ local defaultMeleeDefense = 1.0
 local journeyDefenseModifier = 0.3
 local invulnDurationMs = 4000
 local journeyRunMultiplier = 1.1
+local animalWeaponHash = GetHashKey('WEAPON_ANIMAL')
+local animalDamageScale = 0.3
+local defaultAnimalDamageScale = 1.0
 
 local lastRecordedHealth = nil
 local debugState = Config.DebugDefaults or {enabled = false, godMode = false, infiniteDeaths = false}
@@ -34,6 +37,9 @@ AddEventHandler('cougar:journeyStarted', function()
 
     local playerId = PlayerId()
     SetPlayerMeleeWeaponDefenseModifier(playerId, journeyDefenseModifier)
+    if animalWeaponHash ~= 0 then
+        SetWeaponDamageModifier(animalWeaponHash, animalDamageScale)
+    end
 
     local ped = PlayerPedId()
     if DoesEntityExist(ped) then
@@ -64,6 +70,9 @@ AddEventHandler('cougar:journeyStopped', function()
     SetPlayerMeleeWeaponDefenseModifier(playerId, defaultMeleeDefense)
     SetRunSprintMultiplierForPlayer(playerId, 1.0)
     SetSwimMultiplierForPlayer(playerId, 1.0)
+    if animalWeaponHash ~= 0 then
+        SetWeaponDamageModifier(animalWeaponHash, defaultAnimalDamageScale)
+    end
     lastRecordedHealth = nil
 end)
 
@@ -98,6 +107,9 @@ AddEventHandler('onClientResourceStop', function(resourceName)
         SetPlayerMeleeWeaponDefenseModifier(playerId, defaultMeleeDefense)
         SetRunSprintMultiplierForPlayer(playerId, 1.0)
         SetSwimMultiplierForPlayer(playerId, 1.0)
+        if animalWeaponHash ~= 0 then
+            SetWeaponDamageModifier(animalWeaponHash, defaultAnimalDamageScale)
+        end
         local ped = PlayerPedId()
         if DoesEntityExist(ped) then
             if not (debugState.enabled and debugState.godMode) then

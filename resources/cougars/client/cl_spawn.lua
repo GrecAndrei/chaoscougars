@@ -177,6 +177,27 @@ end)
 RegisterNetEvent('cougar:respawnAt')
 AddEventHandler('cougar:respawnAt', function(coords)
     local playerPed = PlayerPedId()
+    if not DoesEntityExist(playerPed) then
+        return
+    end
+
+    local targetCoords = coords or {}
+    local respawnX = targetCoords.x or targetCoords[1] or 0.0
+    local respawnY = targetCoords.y or targetCoords[2] or 0.0
+    local respawnZ = (targetCoords.z or targetCoords[3] or 0.0) + 1.0
+    local heading = spawnPoint and (spawnPoint.heading or 0.0) or GetEntityHeading(playerPed)
+
+    -- Ensure we are fully out of spectator and mobile before placing
+    NetworkSetInSpectatorMode(false, 0)
+    FreezeEntityPosition(playerPed, false)
+    ClearPedTasksImmediately(playerPed)
+    ClearPedSecondaryTask(playerPed)
+    SetEntityVelocity(playerPed, 0.0, 0.0, 0.0)
+
+    -- Resurrect locally to avoid default hospital respawn glitches
+    NetworkResurrectLocalPlayer(respawnX, respawnY, respawnZ, heading, true, false)
+    SetEntityCollision(playerPed, true, true)
+    RemovePedHelmet(playerPed, true)
     
     -- Teleport to team
     placePedSafely(playerPed, coords)
@@ -184,6 +205,7 @@ AddEventHandler('cougar:respawnAt', function(coords)
     -- Heal and give brief invulnerability
     SetEntityHealth(playerPed, 200)
     SetPedArmour(playerPed, 50)
+    TriggerEvent('cougar:setPlayerSkills')
     protectPed(playerPed, INVULN_DURATION_MS)
     
     -- Visual effect

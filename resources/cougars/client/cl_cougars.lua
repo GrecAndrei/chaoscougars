@@ -619,6 +619,9 @@ AddEventHandler('cougar:spawned', function(netId, typeName, typeData)
     end
 
     configureCougar(entity, typeName, typeData)
+    if typeData then
+        data.prop = attachVisualObject(entity, typeName, typeData)
+    end
     StartCougarAI(entity, typeName)
 end)
 

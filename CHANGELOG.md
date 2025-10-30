@@ -12,3 +12,6 @@
 - Expanded HUD to show teammate vitals without duplicating the local player and moved stats overlay to `Z`.
 - Normalised player tracking across server scripts, fixing nil `NetToEntity` crashes and duplicate roster entries.
 - Locked journey start/finish to deterministic spawn & destination points to avoid unpredictable teleports.
+- Hardened respawn flow by forcing local resurrection, clearing freeze states, and restoring loadouts with spawn invulnerability.
+- Scaled down animal bite damage globally during journeys via `WEAPON_ANIMAL` modifiers to keep cougars lethal but survivable.
+- Reattached ability props for all clients on replicated cougars so visual cues stay in sync with their abilities.

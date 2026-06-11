@@ -862,10 +862,13 @@ end
 
 -- sync_mode: LOCAL
 function FX_MiscPayRespects(alive)
-    while alive() do
-        TaskPlayAnim(PlayerPedId(), "mp_player_int_upperfinger", "mp_player_int_finger_01", 8.0, -1.0, -1, 49, 0.0, false, false, false)
-        Citizen.Wait(5000)
-    end
+    local ped = PlayerPedId()
+    RequestAnimDict("mp_player_int_upperfinger")
+    local t = 20
+    while not HasAnimDictLoaded("mp_player_int_upperfinger") and t > 0 do Citizen.Wait(100); t = t - 1 end
+    TaskPlayAnim(ped, "mp_player_int_upperfinger", "mp_player_int_finger_01", 8.0, -4.0, 2000, 48, 0.0, false, false, false)
+    Citizen.Wait(2500)
+    ClearPedTasks(ped)
 end
 
 -- sync_mode: VISUAL
@@ -1729,13 +1732,13 @@ function FX_PedsFrozen(alive)
     end)
 end
 
--- sync_mode: SPAWN_SINGLE
+-- sync_mode: GLOBAL_OWNED
 function FX_PedsGiveProps(alive)
     local props = {
         GetHashKey("prop_beach_ball_01"), GetHashKey("prop_donut_01"), GetHashKey("prop_snow_flower_01"),
         GetHashKey("prop_roadcone02a"), GetHashKey("prop_bin_01a"), GetHashKey("prop_cs_sol_phone"),
     }
-    for _, ped in ipairs(GetGamePool('CPed')) do
+    OwnershipGuard.ForEachOwnedPed(function(ped)
         if DoesEntityExist(ped) and not IsPedAPlayer(ped) then
             local prop = props[math.random(#props)]
             RequestModel(prop)
@@ -1744,7 +1747,7 @@ function FX_PedsGiveProps(alive)
             SetModelAsNoLongerNeeded(prop)
             AttachEntityToEntity(obj, ped, GetPedBoneIndex(ped, 28422), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, true, true, false, false, 2, true)
         end
-    end
+    end)
 end
 
 -- sync_mode: GLOBAL_OWNED
@@ -1752,17 +1755,16 @@ function FX_PedsGrappleGuns(alive)
     while alive() do
         OwnershipGuard.ForEachOwnedPed(function(ped)
             if DoesEntityExist(ped) and IsPedShooting(ped) then
-                local target = GetNearestPlayerPed(GetEntityCoords(ped))
-                if target and DoesEntityExist(target) then
-                    local pedPos = GetEntityCoords(ped, false)
-                    local targPos = GetEntityCoords(target, false)
-                    local diff = pedPos - targPos
-                    local dist = #diff
-                    if dist > 0.01 then
-                        local dir = diff / dist
-                        ApplyForceToEntityCenterOfMass(target, 1, dir.x * 50.0, dir.y * 50.0, 20.0, true, false, true, true)
+                -- Pull owned vehicles toward the shooting ped instead of applying force to player peds
+                local pedPos = GetEntityCoords(ped, false)
+                OwnershipGuard.ForEachOwnedVehicle(function(veh)
+                    local vehPos = GetEntityCoords(veh, false)
+                    local dist = #(vehPos - pedPos)
+                    if dist < 50.0 and dist > 1.0 then
+                        local dir = (pedPos - vehPos) / dist
+                        ApplyForceToEntityCenterOfMass(veh, 1, dir.x * 30.0, dir.y * 30.0, 10.0, true, false, true, true)
                     end
-                end
+                end)
             end
         end)
         Citizen.Wait(0)

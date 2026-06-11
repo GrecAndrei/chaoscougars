@@ -443,3 +443,241 @@ function RotToDir(rot)
     local num = math.abs(math.cos(rx))
     return vector3(-math.sin(rz) * num, math.cos(rz) * num, math.sin(rx))
 end
+
+-- === NEW: VEHICLE LOCAL ===
+
+function FX_AutoDrive(alive)
+    local ped = PlayerPedId()
+    local veh = GetVehiclePedIsIn(ped, false)
+    if veh == 0 then return end
+    local target
+    if IsWaypointActive() then
+        target = GetBlipCoords(GetFirstBlipInfoId(8))
+    else
+        local fwd = GetEntityForwardVector(veh)
+        local pos = GetEntityCoords(veh)
+        target = vector3(pos.x + fwd.x * 800.0, pos.y + fwd.y * 800.0, pos.z)
+    end
+    TaskVehicleDriveToCoordLongrange(ped, veh, target.x, target.y, target.z, 60.0, 262668, 0.0)
+    while alive() do
+        DisableControlAction(0, 71, true)
+        DisableControlAction(0, 72, true)
+        Citizen.Wait(0)
+    end
+    ClearPedTasks(ped)
+end
+
+function FX_ReverseOnly(alive)
+    while alive() do
+        local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+        if veh ~= 0 then
+            DisableControlAction(0, 71, true)
+            SetControlNormal(0, 72, 1.0)
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_HoverMode(alive)
+    while alive() do
+        local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+        if veh ~= 0 then
+            ApplyForceToEntity(veh, 1, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+            if GetEntityHeightAboveGround(veh) < 1.5 then
+                ApplyForceToEntity(veh, 1, 0.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_StickyTires(alive)
+    while alive() do
+        local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+        if veh ~= 0 then
+            SetVehicleReduceGrip(veh, false)
+        end
+        Citizen.Wait(100)
+    end
+    local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+    if veh ~= 0 then SetVehicleReduceGrip(veh, false) end
+end
+
+function FX_PopcornEngine(alive)
+    while alive() do
+        local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+        if veh ~= 0 and GetIsVehicleEngineRunning(veh) and math.random() < 0.04 then
+            SetVehicleEngineOn(veh, false, true, true)
+            SetTimeout(250 + math.random(0, 400), function()
+                if DoesEntityExist(veh) then SetVehicleEngineOn(veh, true, false, true) end
+            end)
+        end
+        Citizen.Wait(60)
+    end
+end
+
+function FX_ReverseCamera(alive)
+    local cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
+    RenderScriptCams(true, true, 300, true, true)
+    while alive() do
+        local pos = GetGameplayCamCoord()
+        local rot = GetGameplayCamRot(2)
+        SetCamCoord(cam, pos.x, pos.y, pos.z)
+        SetCamRot(cam, rot.x, rot.y, rot.z + 180.0, 2)
+        SetCamFov(cam, GetGameplayCamFov())
+        Citizen.Wait(0)
+    end
+    RenderScriptCams(false, true, 300, true, true)
+    DestroyCam(cam, false)
+end
+
+function FX_UnderwaterCar(alive)
+    while alive() do
+        local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+        if veh ~= 0 then
+            SetEntityProofs(veh, true, true, false, false, false, false, false, false)
+        end
+        Citizen.Wait(0)
+    end
+    local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+    if veh ~= 0 then SetEntityProofs(veh, false, false, false, false, false, false, false, false) end
+end
+
+function FX_IceCam(alive)
+    local cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
+    RenderScriptCams(true, true, 300, true, true)
+    local t = 0
+    while alive() do
+        t = t + 0.1
+        local pos = GetGameplayCamCoord()
+        local rot = GetGameplayCamRot(2)
+        local wobble = math.sin(t * 2.0) * 4.0
+        SetCamCoord(cam, pos.x, pos.y, pos.z)
+        SetCamRot(cam, rot.x + wobble, rot.y + math.cos(t * 1.5) * 3.0, rot.z, 2)
+        SetCamFov(cam, 90.0 + math.sin(t * 3.0) * 15.0)
+        Citizen.Wait(0)
+    end
+    RenderScriptCams(false, true, 300, true, true)
+    DestroyCam(cam, false)
+end
+
+function FX_RocketSeat(alive)
+    while alive() do
+        local ped = PlayerPedId()
+        local veh = GetVehiclePedIsIn(ped, false)
+        if veh ~= 0 and not IsEntityInAir(veh) then
+            local fwd = GetEntityForwardVector(veh)
+            ApplyForceToEntity(veh, 1, fwd.x * 30.0, fwd.y * 30.0, 25.0, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+        end
+        Citizen.Wait(300)
+    end
+end
+
+function FX_TowAlong(alive)
+    while alive() do
+        local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+        if veh ~= 0 and GetEntitySpeed(veh) < 1.0 and math.random() < 0.05 then
+            local fwd = GetEntityForwardVector(veh)
+            ApplyForceToEntity(veh, 1, fwd.x * 50.0, fwd.y * 50.0, 0.0, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+            ShakeGameplayCam('SMALL_EXPLOSION_SHAKE', 0.3)
+        end
+        Citizen.Wait(500)
+    end
+end
+
+-- === NEW: PLAYER LOCAL ===
+
+function FX_HugePlayer(alive)
+    SetPedScale(PlayerPedId(), 2.5)
+    while alive() do Citizen.Wait(500) end
+    SetPedScale(PlayerPedId(), 1.0)
+end
+
+function FX_TinyPlayer(alive)
+    SetPedScale(PlayerPedId(), 0.4)
+    while alive() do Citizen.Wait(500) end
+    SetPedScale(PlayerPedId(), 1.0)
+end
+
+function FX_MarioVoice(alive)
+    SetAmbientVoiceName(PlayerPedId(), 'A_F_M_BEVHILLS_02_WHITE_FULL_01')
+    while alive() do Citizen.Wait(500) end
+    SetAmbientVoiceName(PlayerPedId(), 'A_M_Y_ACULT_01_WHITE_FULL_01')
+end
+
+function FX_WhisperVoice(alive)
+    SetAmbientVoiceName(PlayerPedId(), 'A_M_M_SKIDROW_01_WHITE_FULL_02')
+    while alive() do Citizen.Wait(500) end
+    SetAmbientVoiceName(PlayerPedId(), 'A_M_Y_ACULT_01_WHITE_FULL_01')
+end
+
+function FX_InvisiblePlayer(alive)
+    SetEntityAlpha(PlayerPedId(), 0, false)
+    while alive() do Citizen.Wait(500) end
+    ResetEntityAlpha(PlayerPedId())
+end
+
+function FX_Pacifist(alive)
+    DisablePlayerFiring(PlayerId(), true)
+    while alive() do
+        DisablePlayerFiring(PlayerId(), true)
+        Citizen.Wait(0)
+    end
+end
+
+function FX_ConfusedControls(alive)
+    while alive() do
+        local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+        if veh ~= 0 then
+            if IsControlPressed(0, 34) then SetControlNormal(0, 35, 1.0) end
+            if IsControlPressed(0, 35) then SetControlNormal(0, 34, 1.0) end
+            if IsControlPressed(0, 71) then SetControlNormal(0, 72, 1.0) end
+            if IsControlPressed(0, 72) then SetControlNormal(0, 71, 1.0) end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_HeavyPlayer(alive)
+    while alive() do
+        ApplyForceToEntity(PlayerPedId(), 1, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
+        Citizen.Wait(0)
+    end
+end
+
+function FX_ExplosiveMelee(alive)
+    while alive() do
+        if IsPedInMeleeCombat(PlayerPedId()) and IsPedPerformingMeleeAction(PlayerPedId()) then
+            local pos = GetEntityCoords(PlayerPedId())
+            local fwd = GetEntityForwardVector(PlayerPedId())
+            AddExplosion(pos.x + fwd.x * 1.5, pos.y + fwd.y * 1.5, pos.z, 4, 4.0, true, false, 0.5)
+            Citizen.Wait(400)
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_IceSkates(alive)
+    while alive() do
+        local ped = PlayerPedId()
+        if not IsPedInAnyVehicle(ped, false) and IsPedOnFoot(ped) then
+            local vel = GetEntityVelocity(ped)
+            if math.abs(vel.x) > 0.05 or math.abs(vel.y) > 0.05 then
+                SetEntityVelocity(ped, vel.x * 1.04, vel.y * 1.04, vel.z)
+            end
+            if math.random() < 0.04 then
+                ApplyForceToEntity(ped, 1, math.random(-15.0, 15.0), math.random(-15.0, 15.0), 0.0, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_ReverseTime(alive)
+    while alive() do
+        local h = GetClockHours() - 1
+        if h < 0 then h = 23 end
+        SetClockTime(h, GetClockMinutes(), GetClockSeconds())
+        Citizen.Wait(1000)
+    end
+end

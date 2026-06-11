@@ -116,6 +116,74 @@ Effects.Pool = {
     {id='meta_timer_5x',        name='5x Timer Speed',        fn='FX_MetaTimerspeed5x',    sync_mode=SyncMode.META},
     {id='meta_no_chaos',        name='No Chaos',              fn='FX_MetaNoChaos',         sync_mode=SyncMode.META, short=true},
     {id='meta_hide_ui',         name='Hide Chaos UI',         fn='FX_MetaHideUI',          sync_mode=SyncMode.META},
+
+    -- === NEW: VEHICLE LOCAL ===
+    {id='auto_drive',        name='Auto Drive',                fn='FX_AutoDrive',        sync_mode=SyncMode.LOCAL, short=true},
+    {id='reverse_only',      name='Reverse Only',              fn='FX_ReverseOnly',      sync_mode=SyncMode.LOCAL, short=true},
+    {id='hover_mode',        name='Hover Mode',                fn='FX_HoverMode',        sync_mode=SyncMode.LOCAL},
+    {id='sticky_tires',      name='Sticky Tires',              fn='FX_StickyTires',      sync_mode=SyncMode.LOCAL},
+    {id='popcorn_engine',    name='Popcorn Engine',            fn='FX_PopcornEngine',    sync_mode=SyncMode.LOCAL, short=true},
+    {id='reverse_camera',    name='Reverse Camera',            fn='FX_ReverseCamera',    sync_mode=SyncMode.LOCAL, short=true},
+    {id='underwater_car',    name='Submarine',                 fn='FX_UnderwaterCar',    sync_mode=SyncMode.LOCAL},
+    {id='ice_cam',           name='Jello Cam',                 fn='FX_IceCam',           sync_mode=SyncMode.LOCAL, short=true},
+    {id='rocket_seat',       name='Rocket Seat',               fn='FX_RocketSeat',       sync_mode=SyncMode.LOCAL},
+    {id='tow_along',         name='Tow Mode',                  fn='FX_TowAlong',         sync_mode=SyncMode.LOCAL},
+
+    -- === NEW: VEHICLE GLOBAL ===
+    {id='all_honk',          name='Honk-a-thon',               fn='FX_AllHonk',          sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+    {id='invisible_cars',    name='Invisible Cars',            fn='FX_InvisibleCars',    sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+    {id='tractor_beam',      name='Tractor Beam',              fn='FX_TractorBeam',      sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+    {id='cars_to_player',    name='Cars Converge',             fn='FX_CarsToPlayer',     sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+
+    -- === NEW: PLAYER LOCAL ===
+    {id='huge_player',       name='Giant Mode',                fn='FX_HugePlayer',       sync_mode=SyncMode.LOCAL, short=true},
+    {id='tiny_player',       name='Tiny Mode',                 fn='FX_TinyPlayer',       sync_mode=SyncMode.LOCAL, short=true},
+    {id='mario_voice',       name='Mario Voice',               fn='FX_MarioVoice',       sync_mode=SyncMode.LOCAL, short=true},
+    {id='whisper_voice',     name='Whisper Voice',             fn='FX_WhisperVoice',     sync_mode=SyncMode.LOCAL, short=true},
+    {id='invisible_player',  name='Invisible Player',          fn='FX_InvisiblePlayer',  sync_mode=SyncMode.LOCAL, short=true},
+    {id='pacifist',          name='Pacifist',                  fn='FX_Pacifist',         sync_mode=SyncMode.LOCAL, short=true},
+    {id='confused_controls', name='Confused Controls',         fn='FX_ConfusedControls', sync_mode=SyncMode.LOCAL, short=true},
+    {id='heavy_player',      name='Heavy Player',              fn='FX_HeavyPlayer',      sync_mode=SyncMode.LOCAL},
+    {id='explosive_melee',   name='Explosive Fists',           fn='FX_ExplosiveMelee',   sync_mode=SyncMode.LOCAL},
+    {id='ice_skates',        name='Ice Skates',                fn='FX_IceSkates',        sync_mode=SyncMode.LOCAL, short=true},
+
+    -- === NEW: PEDS GLOBAL ===
+    {id='peds_zombies',      name='Zombie Peds',               fn='FX_PedsZombies',      sync_mode=SyncMode.GLOBAL_OWNED, instant=true},
+    {id='peds_wave',         name='Peds Wave Hello',           fn='FX_PedsWave',         sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+    {id='peds_sit',          name='Peds Sit Down',             fn='FX_PedsSit',          sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+    {id='peds_levitate',     name='Peds Levitate',             fn='FX_PedsLevitate',     sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+    {id='peds_dance',        name='Peds Dance',                fn='FX_PedsDance',        sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+
+    -- === NEW: SCREEN/VISUAL ===
+    {id='greyscale',         name='Greyscale',                 fn='FX_Greyscale',        sync_mode=SyncMode.VISUAL},
+    {id='wavy_vision',       name='Wavy Vision',               fn='FX_WavyVision',       sync_mode=SyncMode.VISUAL},
+    {id='fish_eye',          name='Fish Eye',                  fn='FX_FishEye',          sync_mode=SyncMode.VISUAL},
+    {id='bloom',             name='Heavy Bloom',               fn='FX_Bloom',            sync_mode=SyncMode.VISUAL},
+    {id='tunnel_vision',     name='Tunnel Vision',             fn='FX_TunnelVision',     sync_mode=SyncMode.VISUAL, short=true},
+
+    -- === NEW: TIME/WEATHER ===
+    {id='midnight',          name='Midnight',                  fn='FX_Midnight',         sync_mode=SyncMode.VISUAL},
+    {id='high_noon',         name='High Noon',                 fn='FX_HighNoon',         sync_mode=SyncMode.VISUAL},
+    {id='smog',              name='Smog',                      fn='FX_Smog',             sync_mode=SyncMode.VISUAL},
+    {id='rain_storm',        name='Rainstorm',                 fn='FX_RainStorm',        sync_mode=SyncMode.VISUAL},
+    {id='reverse_time',      name='Time Reverses',             fn='FX_ReverseTime',      sync_mode=SyncMode.LOCAL, short=true},
+
+    -- === NEW: MISC WORLD ===
+    {id='lava_ground',       name='Lava Ground',               fn='FX_LavaGround',       sync_mode=SyncMode.GLOBAL_OWNED, short=true},
+    {id='shrink_ray',        name='Shrink Ray',                fn='FX_ShrinkRay',        sync_mode=SyncMode.GLOBAL_OWNED, instant=true},
+    {id='grow_ray',          name='Grow Ray',                  fn='FX_GrowRay',          sync_mode=SyncMode.GLOBAL_OWNED, instant=true},
+    {id='gravity_pulse',     name='Gravity Pulse',             fn='FX_GravityPulse',     sync_mode=SyncMode.VISUAL, short=true},
+    {id='color_swap',        name='Color Swap',                fn='FX_ColorSwap',        sync_mode=SyncMode.GLOBAL_OWNED, instant=true},
+
+    -- === NEW: SPAWN SINGLE ===
+    {id='spawn_alien',       name='Spawn Alien',               fn='FX_SpawnAlien',       sync_mode=SyncMode.SPAWN_SINGLE, instant=true},
+    {id='spawn_bigfoot',     name='Spawn Bigfoot',             fn='FX_SpawnBigfoot',     sync_mode=SyncMode.SPAWN_SINGLE, instant=true},
+    {id='spawn_zombie_horde',name='Spawn Zombie Horde',        fn='FX_SpawnZombieHorde', sync_mode=SyncMode.SPAWN_SINGLE, instant=true},
+
+    -- === NEW: META ===
+    {id='meta_super_chaos',     name='Super Chaos',            fn='FX_MetaSuperChaos',     sync_mode=SyncMode.META, short=true},
+    {id='meta_extreme_duration',name='3x Duration',            fn='FX_MetaExtremeDuration',sync_mode=SyncMode.META, short=true},
+    {id='meta_chaos_ramp',      name='Chaos Ramp',             fn='FX_MetaChaosRamp',      sync_mode=SyncMode.META},
 }
 
 -- Build lookup

@@ -48,6 +48,28 @@ function FX_MetaHideUI(alive)
     MetaSetInternal('hideChaosUI', false)
 end
 
+-- === NEW: META ===
+
+function FX_MetaSuperChaos(alive)
+    MetaSetInternal('additionalEffects', 3)
+    while alive() do Citizen.Wait(250) end
+    MetaSetInternal('additionalEffects', 0)
+end
+
+function FX_MetaExtremeDuration(alive)
+    MetaSetInternal('durationModifier', 3.0)
+    while alive() do Citizen.Wait(250) end
+    MetaSetInternal('durationModifier', 1.0)
+end
+
+function FX_MetaChaosRamp(alive)
+    MetaSetInternal('additionalEffects', 1)
+    MetaSetInternal('timerModifier', 0.5)
+    while alive() do Citizen.Wait(250) end
+    MetaSetInternal('additionalEffects', 0)
+    MetaSetInternal('timerModifier', 1.0)
+end
+
 -- Meta effects call server directly since they originate from chaos system
 function MetaSetInternal(key, value)
     TriggerServerEvent('cc:meta_set_internal', key, value)

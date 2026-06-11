@@ -138,3 +138,86 @@ function FX_Airstrike()
         end)
     end
 end
+
+-- === NEW: SCREEN/VISUAL ===
+
+function FX_Greyscale(alive)
+    SetTimecycleModifier('spectator8')
+    while alive() do Citizen.Wait(500) end
+    ClearTimecycleModifier()
+end
+
+function FX_WavyVision(alive)
+    SetTimecycleModifier('drug_wobbly')
+    SetTimecycleModifierStrength(1.5)
+    while alive() do Citizen.Wait(500) end
+    ClearTimecycleModifier()
+end
+
+function FX_FishEye(alive)
+    SetTimecycleModifier('Barry_Stoned')
+    SetTimecycleModifierStrength(1.0)
+    while alive() do Citizen.Wait(500) end
+    ClearTimecycleModifier()
+end
+
+function FX_Bloom(alive)
+    SetTimecycleModifier('Bloom')
+    SetTimecycleModifierStrength(2.0)
+    while alive() do Citizen.Wait(500) end
+    ClearTimecycleModifier()
+end
+
+function FX_TunnelVision(alive)
+    local cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
+    RenderScriptCams(true, true, 300, true, true)
+    while alive() do
+        local pos = GetGameplayCamCoord()
+        local rot = GetGameplayCamRot(2)
+        SetCamCoord(cam, pos.x, pos.y, pos.z)
+        SetCamRot(cam, rot.x, rot.y, rot.z, 2)
+        SetCamFov(cam, 25.0)
+        Citizen.Wait(0)
+    end
+    RenderScriptCams(false, true, 300, true, true)
+    DestroyCam(cam, false)
+end
+
+-- === NEW: TIME/WEATHER ===
+
+function FX_Midnight(alive)
+    SetClockTime(0, 0, 0)
+    NetworkOverrideClockTime(0, 0, 0)
+    while alive() do Citizen.Wait(500) end
+    NetworkClearClockTimeOverride()
+end
+
+function FX_HighNoon(alive)
+    SetClockTime(12, 0, 0)
+    NetworkOverrideClockTime(12, 0, 0)
+    while alive() do Citizen.Wait(500) end
+    NetworkClearClockTimeOverride()
+end
+
+function FX_Smog(alive)
+    SetWeatherTypeNowPersist('SMOG')
+    while alive() do Citizen.Wait(1000) end
+    ClearWeatherTypePersist()
+end
+
+function FX_RainStorm(alive)
+    SetWeatherTypeNowPersist('RAIN')
+    while alive() do Citizen.Wait(1000) end
+    ClearWeatherTypePersist()
+end
+
+-- === NEW: GRAVITY PULSE (visual sync, but it's gravity) ===
+
+function FX_GravityPulse(alive)
+    local levels = {0, 1, 2, 3}
+    while alive() do
+        SetGravityLevel(levels[math.random(#levels)])
+        Citizen.Wait(2500)
+    end
+    SetGravityLevel(0)
+end

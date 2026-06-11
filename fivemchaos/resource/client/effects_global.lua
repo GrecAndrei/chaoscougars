@@ -263,3 +263,207 @@ function FX_MoneyRain()
         CreateAmbientPickup(`PICKUP_MONEY_CASE`, x, y, pos.z + 25.0, 0, 1000, 0, false, true)
     end
 end
+
+-- === NEW: VEHICLE GLOBAL ===
+
+function FX_AllHonk(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedVehicle(function(veh)
+            if GetIsVehicleEngineRunning(veh) and math.random() < 0.3 then
+                StartVehicleHorn(veh, 200, `HELDDOWN`, false)
+            end
+        end)
+        Citizen.Wait(400)
+    end
+end
+
+function FX_InvisibleCars(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedVehicle(function(veh)
+            if not IsPedInVehicle(PlayerPedId(), veh, false) then
+                SetEntityAlpha(veh, 0, false)
+                SetEntityCollision(veh, false, false)
+            end
+        end)
+        Citizen.Wait(500)
+    end
+    OwnershipGuard.ForEachOwnedVehicle(function(veh)
+        ResetEntityAlpha(veh)
+        SetEntityCollision(veh, true, true)
+    end)
+end
+
+function FX_TractorBeam(alive)
+    while alive() do
+        local ppos = GetEntityCoords(PlayerPedId())
+        OwnershipGuard.ForEachOwnedVehicle(function(veh)
+            if not IsPedInVehicle(PlayerPedId(), veh, false) then
+                local vpos = GetEntityCoords(veh)
+                local dist = #(vpos - ppos)
+                if dist > 5.0 and dist < 200.0 then
+                    local dir = ppos - vpos
+                    ApplyForceToEntity(veh, 1, dir.x * 0.6, dir.y * 0.6, dir.z * 0.6, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+                end
+            end
+        end)
+        Citizen.Wait(0)
+    end
+end
+
+function FX_CarsToPlayer(alive)
+    while alive() do
+        local ppos = GetEntityCoords(PlayerPedId())
+        local myVeh = GetVehiclePedIsIn(PlayerPedId(), false)
+        OwnershipGuard.ForEachOwnedVehicle(function(veh)
+            if veh ~= myVeh then
+                local vpos = GetEntityCoords(veh)
+                local dist = #(vpos - ppos)
+                if dist > 20.0 and dist < 300.0 then
+                    local dir = ppos - vpos
+                    local vel = GetEntityVelocity(veh)
+                    ApplyForceToEntity(veh, 1, dir.x * 1.2, dir.y * 1.2, 0.0, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+                end
+            end
+        end)
+        Citizen.Wait(50)
+    end
+end
+
+-- === NEW: PEDS GLOBAL ===
+
+function FX_PedsZombies()
+    local zombie = `u_m_y_zombie_01`
+    RequestModel(zombie)
+    local timeout = 0
+    while not HasModelLoaded(zombie) and timeout < 100 do
+        Citizen.Wait(10)
+        timeout = timeout + 1
+    end
+    if not HasModelLoaded(zombie) then return end
+
+    local myPed = PlayerPedId()
+    local spawns = {}
+    OwnershipGuard.ForEachOwnedPed(function(p)
+        if p ~= myPed and not IsPedInAnyVehicle(p, true) and not IsEntityDead(p) then
+            local pos = GetEntityCoords(p)
+            local z = CreatePed(4, zombie, pos.x, pos.y, pos.z, math.random(0, 360) + 0.0, true, true)
+            if z ~= 0 then spawns[#spawns + 1] = z end
+            DeleteEntity(p)
+        end
+    end)
+
+    for _, z in ipairs(spawns) do
+        GiveWeaponToPed(z, `WEAPON_BAT`, 1, false, true)
+        local target = GetNearestPlayerPed(GetEntityCoords(z)) or myPed
+        TaskCombatPed(z, target, 0, 16)
+        SetPedFleeAttributes(z, 0, false)
+        SetBlockingOfNonTemporaryEvents(z, true)
+        SetPedKeepTask(z, true)
+    end
+
+    SetModelAsNoLongerNeeded(zombie)
+end
+
+function FX_PedsWave(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(p)
+            if not IsPedInAnyVehicle(p, true) and not IsEntityDead(p) and not IsPedUsingAnyScenario(p) then
+                TaskStartScenarioInPlace(p, 'WORLD_HUMAN_CHEERING', 0, true)
+                SetPedKeepTask(p, true)
+            end
+        end)
+        Citizen.Wait(2000)
+    end
+    OwnershipGuard.ForEachOwnedPed(function(p)
+        ClearPedTasks(p)
+        SetPedKeepTask(p, false)
+    end)
+end
+
+function FX_PedsSit(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(p)
+            if not IsPedInAnyVehicle(p, true) and not IsEntityDead(p) and not IsPedUsingAnyScenario(p) then
+                TaskStartScenarioInPlace(p, 'WORLD_HUMAN_PICNIC', 0, true)
+                SetPedKeepTask(p, true)
+            end
+        end)
+        Citizen.Wait(2000)
+    end
+    OwnershipGuard.ForEachOwnedPed(function(p)
+        ClearPedTasks(p)
+        SetPedKeepTask(p, false)
+    end)
+end
+
+function FX_PedsLevitate(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(p)
+            if not IsPedInAnyVehicle(p, true) and not IsEntityDead(p) then
+                ApplyForceToEntity(p, 1, 0.0, 0.0, 1.5, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+end
+
+function FX_PedsDance(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(p)
+            if not IsPedInAnyVehicle(p, true) and not IsEntityDead(p) and not IsPedUsingAnyScenario(p) then
+                TaskStartScenarioInPlace(p, 'WORLD_HUMAN_MUSICIAN', 0, true)
+                SetPedKeepTask(p, true)
+            end
+        end)
+        Citizen.Wait(2000)
+    end
+    OwnershipGuard.ForEachOwnedPed(function(p)
+        ClearPedTasks(p)
+        SetPedKeepTask(p, false)
+    end)
+end
+
+-- === NEW: MISC WORLD ===
+
+function FX_LavaGround(alive)
+    local fires = {}
+    while alive() do
+        local pos = GetEntityCoords(PlayerPedId())
+        for i = 1, 3 do
+            local x = pos.x + math.random(-30, 30)
+            local y = pos.y + math.random(-30, 30)
+            local found, groundZ = GetGroundZFor_3dCoord(x, y, pos.z + 50.0, false)
+            if found then
+                fires[#fires + 1] = StartScriptFire(x, y, groundZ, 25, false)
+            end
+        end
+        Citizen.Wait(500)
+    end
+    for _, handle in ipairs(fires) do
+        RemoveScriptFire(handle)
+    end
+end
+
+function FX_ShrinkRay()
+    OwnershipGuard.ForEachOwnedVehicle(function(v) SetEntityScale(v, 0.3, 0.3, 0.3) end)
+    OwnershipGuard.ForEachOwnedPed(function(p)
+        if p ~= PlayerPedId() then SetPedScale(p, 0.4) end
+    end)
+    OwnershipGuard.ForEachOwnedObject(function(o) SetEntityScale(o, 0.3, 0.3, 0.3) end)
+end
+
+function FX_GrowRay()
+    OwnershipGuard.ForEachOwnedVehicle(function(v) SetEntityScale(v, 2.0, 2.0, 2.0) end)
+    OwnershipGuard.ForEachOwnedPed(function(p)
+        if p ~= PlayerPedId() then SetPedScale(p, 1.8) end
+    end)
+    OwnershipGuard.ForEachOwnedObject(function(o) SetEntityScale(o, 2.0, 2.0, 2.0) end)
+end
+
+function FX_ColorSwap()
+    local palette = {0, 27, 38, 64, 70, 88, 111, 134, 135, 142}
+    OwnershipGuard.ForEachOwnedVehicle(function(v)
+        local c = palette[math.random(#palette)]
+        SetVehicleColours(v, c, c)
+    end)
+end

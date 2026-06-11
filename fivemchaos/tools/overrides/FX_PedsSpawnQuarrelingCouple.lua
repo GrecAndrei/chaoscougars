@@ -1,0 +1,23 @@
+function FX_PedsSpawnQuarrelingCouple(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local heading = GetEntityHeading(playerPed)
+    local relationshipGroup = AddRelationshipGroup("_HOSTILE_DEBRA")
+    SetRelationshipBetweenGroups(5, relationshipGroup, GetHashKey("PLAYER"))
+    local debraHash = GetHashKey("cs_debra")
+    local floydHash = GetHashKey("cs_floyd")
+    RequestModel(debraHash)
+    while not HasModelLoaded(debraHash) do Citizen.Wait(0) end
+    local debra = CreatePed(4, debraHash, playerPos.x + 1.0, playerPos.y, playerPos.z, heading, true, false)
+    SetPedRelationshipGroupHash(debra, relationshipGroup)
+    GiveWeaponToPed(debra, GetHashKey("WEAPON_PISTOL"), 9999, true, true)
+    TaskCombatPed(debra, PlayerPedId(), 0, 16)
+    SetModelAsNoLongerNeeded(debraHash)
+    RequestModel(floydHash)
+    while not HasModelLoaded(floydHash) do Citizen.Wait(0) end
+    local floyd = CreatePed(4, floydHash, playerPos.x - 1.0, playerPos.y, playerPos.z, heading, true, false)
+    SetPedRelationshipGroupHash(floyd, relationshipGroup)
+    GiveWeaponToPed(floyd, GetHashKey("WEAPON_KNIFE"), 9999, true, true)
+    TaskCombatPed(floyd, PlayerPedId(), 0, 16)
+    SetModelAsNoLongerNeeded(floydHash)
+end

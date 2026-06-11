@@ -1,0 +1,28 @@
+function FX_PedsSpawnimrage(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local group = AddRelationshipGroup("_IM_RAGE")
+    SetRelationshipBetweenGroups(5, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVMALE"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVFEMALE"))
+    local model = GetHashKey("u_m_y_imporage")
+    RequestModel(model)
+    while not HasModelLoaded(model) do Citizen.Wait(0) end
+    local ped = CreatePed(4, model, playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed), true, false)
+    SetModelAsNoLongerNeeded(model)
+    SetEntityHealth(ped, 1000)
+    SetPedArmour(ped, 1000)
+    SetPedRelationshipGroupHash(ped, group)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedCanRagdollFromPlayerImpact(ped, false)
+    SetRagdollBlockingFlags(ped, 5)
+    SetPedSuffersCriticalHits(ped, false)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    TaskCombatPed(ped, playerPed, 0, 16)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+end

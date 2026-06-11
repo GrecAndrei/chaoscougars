@@ -1,0 +1,6 @@
+ref-chaosmodv/
+ChaosModV-master/
+*.asi
+.vs/
+*.user
+build/

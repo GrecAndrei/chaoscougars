@@ -1,0 +1,93 @@
+You are generating a FiveM test resource for a chaos mod. The test resource runs ALONGSIDE the main resource (named "fivemchaos") and exercises all major systems via server console commands.
+
+=== ARCHITECTURE CONTEXT ===
+
+The main resource uses these shared enums:
+
+```lua
+SyncMode = {
+    LOCAL = 'LOCAL',
+    GLOBAL_OWNED = 'GLOBAL_OWNED',
+    VISUAL = 'VISUAL',
+    SPAWN_SINGLE = 'SPAWN_SINGLE',
+    META = 'META',
+}
+
+Phase = {
+    LOBBY = 'LOBBY',
+    STARTING = 'STARTING',
+    RUNNING = 'RUNNING',
+    PAUSED = 'PAUSED',
+    WON = 'WON',
+    LOST = 'LOST',
+}
+```
+
+State is a global on the server with fields: phase, players, startTime, difficulty, activeEffectsList, spawnLoad, meta. Key functions: State.Broadcast(event, ...), State.TrackEffect(id, name, fn, sync_mode, duration, seed, executorId), State.PickExecutor(), State.PlayerCount(), State.AliveCount(), State.UpdateDifficulty(), State.GetChaosInterval(), State.GetMaxCougars(), State.GetSpawnCooldown().
+
+Effects dispatching (server chaos.lua) uses DispatchEffect which:
+- META: broadcasts cc:trigger_effect to all
+- SPAWN_SINGLE: sends cc:trigger_effect to one executor via State.PickExecutor()
+- Otherwise (LOCAL, GLOBAL_OWNED, VISUAL): broadcasts cc:trigger_effect to all
+
+The effects registry (Effects.Pool) has these representative effects per sync mode:
+- LOCAL: 'low_gravity' (FX_LowGravity), 'slippery_cars' (FX_SlipperyCars)
+- GLOBAL_OWNED: 'bouncy_cars' (FX_BouncyCars), 'flip_cars' (FX_FlipCars, instant)
+- VISUAL: 'flip_screen' (FX_FlipScreen), 'lsd' (FX_LSD)
+- SPAWN_SINGLE: 'spawn_juggernaut' (FX_SpawnJuggernaut, instant)
+- META: 'meta_spawn_multiple' (FX_MetaSpawnMultiple), 'meta_timer_2x' (FX_MetaTimerspeed2x)
+
+The Director spawns cougars. CougarTypes: fence, car, shooter, jesus, ball_blue, ball_purple, swarm, bomber, phantom, stun, magnetic, splitter. It uses events:
+- Server triggers: TriggerClientEvent('cc:spawn_cougar', targetId, cougarType, pos)
+- Client reports: cc:cougar_spawned(netId, type, pos), cc:cougar_dead(netId)
+- Server events: cc:director_start, cc:director_stop
+
+Late join sync (server/late_join.lua):
+- AddEventHandler('cc:player_joined_running', function(src)) builds a snapshot from State.activeEffectsList and sends TriggerClientEvent('cc:late_join_sync', src, snapshot, State.difficulty, State.meta)
+
+Mission lifecycle: StartMission() goes LOBBY->STARTING->RUNNING, EndMission(result, detail) goes to WON/LOST then back to LOBBY after 12s. PauseMission(paused) toggles RUNNING<->PAUSED.
+
+The main resource's fxmanifest uses fx_version 'cerulean', game 'gta5'.
+
+=== TASK ===
+
+Generate THREE files for a test resource at resource_test/:
+
+1. fxmanifest.lua - depends on 'fivemchaos', server_script 'server.lua', client_script 'client.lua'
+2. server.lua - all test commands and logging
+3. client.lua - client-side helpers for tests that need client participation
+
+The test resource provides these server console commands (src==0 only):
+
+1. /cc_test_effects — Cycles through ALL 5 sync modes with one representative effect each (low_gravity for LOCAL, bouncy_cars for GLOBAL_OWNED, flip_screen for VISUAL, spawn_juggernaut for SPAWN_SINGLE, meta_spawn_multiple for META). Each fires with 3s delay between them. For each, it verifies the effect was tracked in State.activeEffectsList (for non-instant) or that dispatch completed without error. Logs [CC_TEST] PASS/FAIL for each sync mode.
+
+2. /cc_test_cougars — Spawns one of each cougar type (all 12: fence, car, shooter, jesus, ball_blue, ball_purple, swarm, bomber, phantom, stun, magnetic, splitter) with 5s delays between each. Requires at least one player connected. Uses TriggerClientEvent('cc:spawn_cougar', targetPlayer, type, spawnPos). Logs each spawn attempt and whether cc:cougar_spawned was received back within 10s (PASS/FAIL).
+
+3. /cc_test_ownership — Spawns 10 vehicles via client, checks that only the owning player modifies each. Needs 2+ players. The client reports ownership info back. Server logs any ownership conflicts as FAIL.
+
+4. /cc_test_latejoin — Manually fires several effects to build up State.activeEffectsList, waits 5s, then calls TriggerEvent('cc:player_joined_running', targetPlayer) to simulate late join. Verifies the client received cc:late_join_sync with the correct snapshot. Logs PASS/FAIL.
+
+5. /cc_test_director — Sets State.difficulty = 0.5, triggers 'cc:director_start', logs all cougar types spawned over 60 seconds by hooking cc:cougar_spawned. After 60s triggers 'cc:director_stop' and prints a summary of types spawned with counts. PASS if at least 3 different types were spawned.
+
+6. /cc_test_stress — Fires 10 effects rapidly (one every 2s) using different effects from the pool. Checks for no errors/crashes after all 10 fire. Logs PASS if all dispatched without error, FAIL if any pcall catches an error.
+
+7. /cc_test_phase — Cycles through phases: LOBBY->STARTING->RUNNING->PAUSED->WON->LOST with 3s each. Verifies State.phase matches expected at each step. Broadcasts cc:state for each. Logs PASS/FAIL for each transition.
+
+=== REQUIREMENTS ===
+
+- All logging uses print() with prefix "[CC_TEST]" and includes PASS or FAIL
+- Use pcall() around risky operations to catch errors gracefully
+- The test resource must NOT modify the main resource's code
+- Use exports or direct State/Effects access where the main resource exposes them as globals (they are globals in the same Lua runtime since shared_scripts run first - BUT since this is a SEPARATE resource, you must use events and TriggerEvent/TriggerClientEvent)
+- Since this is a separate resource, access to State/Effects globals is NOT available. Use events and the existing event API.
+- For effects dispatch, replicate the dispatch logic locally or trigger via the existing cc_effect command approach: ExecuteCommand('cc_effect <id>')
+- For director testing, use TriggerEvent to fire cc:director_start/cc:director_stop
+- For phase testing, directly set the phase by accessing exports or use the mission lifecycle commands
+- The client.lua should handle: responding to test pings, reporting spawn results, ownership test participation
+- Use Citizen.SetTimeout and Citizen.CreateThread for async operations
+- Output all three files completely, ready to use
+
+Generate the three files now. Output them clearly separated with headers:
+--- fxmanifest.lua ---
+--- server.lua ---
+--- client.lua ---

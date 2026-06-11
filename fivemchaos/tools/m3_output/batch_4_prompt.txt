@@ -1,0 +1,905 @@
+Convert these 50 FiveM Lua chaos effects to multiplayer-safe versions. Classify each with sync_mode and apply ownership guards where needed. Keep function names exactly as they are.
+
+function FX_PlayerRagdollondmg(alive)
+    while alive() do
+        local playerPed = PlayerPedId()
+        if HasEntityBeenDamagedByAnyPed(playerPed) or HasEntityBeenDamagedByAnyVehicle(playerPed) then
+            ClearEntityLastDamageEntity(playerPed)
+            SetPedToRagdoll(playerPed, 750, 750, 0, true, true, false)
+        end
+        Citizen.Wait(100)
+    end
+end
+
+function FX_PlayerRandclothes(alive)
+    local playerPed = PlayerPedId()
+    for i = 0, 11 do
+        local drawableAmount = GetNumberOfPedDrawableVariations(playerPed, i)
+        local drawable = drawableAmount > 0 and math.random(0, drawableAmount - 1) or 0
+        local textureAmount = GetNumberOfPedTextureVariations(playerPed, i, drawable)
+        local texture = textureAmount > 0 and math.random(0, textureAmount - 1) or 0
+        SetPedComponentVariation(playerPed, i, drawable, texture, math.random(0, 3))
+    end
+end
+
+local allPossibleJumps = {
+    { x = 46.101, y = 6530.031, z = 30.713, rotation = 137.332, speed = 40.0 },
+    { x = -186.248, y = 6554.466, z = 10.446, rotation = 314.389, speed = 30.0 },
+    { x = 490.106, y = 4309.650, z = 54.884, rotation = 54.039, speed = 45.0 },
+    { x = -953.295, y = 4166.992, z = 136.374, rotation = 51.525, speed = 30.0 },
+    { x = 3335.163, y = 5148.697, z = 17.637, rotation = 276.721, speed = 45.0 },
+    { x = 1684.881, y = 3141.746, z = 42.871, rotation = 24.974, speed = 45.0 },
+    { x = 1680.338, y = 2316.249, z = 74.705, rotation = 357.364, speed = 43.0 },
+    { x = 1780.440, y = 2056.524, z = 65.945, rotation = 195.309, speed = 60.0 },
+    { x = 2001.575, y = 1920.334, z = 91.608, rotation = 57.712, speed = 45.0 },
+    { x = -2.917, y = 1699.827, z = 226.620, rotation = 325.440, speed = 45.0 },
+    { x = -1447.177, y = 412.317, z = 109.067, rotation = 191.007, speed = 55.0 },
+    { x = -1081.151, y = 11.979, z = 50.056, rotation = 257.962, speed = 22.0 },
+    { x = -713.306, y = -49.739, z = 37.063, rotation = 110.136, speed = 42.0 },
+    { x = -588.852, y = -92.791, z = 41.684, rotation = 153.347, speed = 30.0 },
+    { x = -1589.183, y = -748.284, z = 20.791, rotation = 79.817, speed = 48.0 },
+    { x = 46.478, y = -780.456, z = 43.524, rotation = 249.806, speed = 30.0 },
+    { x = 303.248, y = -618.176, z = 42.797, rotation = 249.437, speed = 40.0 },
+    { x = 563.992, y = -583.787, z = 43.544, rotation = 187.271, speed = 45.0 },
+    { x = -285.071, y = -763.947, z = 52.595, rotation = 241.151, speed = 45.0 },
+    { x = -873.079, y = -848.673, z = 18.503, rotation = 106.121, speed = 40.0 },
+    { x = -617.539, y = -1074.971, z = 21.727, rotation = 74.128, speed = 40.0 },
+    { x = 2.338, y = -1038.557, z = 37.502, rotation = 70.644, speed = 35.0 },
+    { x = -440.262, y = -1178.323, z = 52.588, rotation = 175.859, speed = 50.0 },
+    { x = -533.043, y = -1480.427, z = 11.122, rotation = 248.903, speed = 45.0 },
+    { x = -453.039, y = -1380.261, z = 29.779, rotation = 180.118, speed = 45.0 },
+    { x = -570.175, y = -1533.781, z = 0.603, rotation = 72.475, speed = 50.0 },
+    { x = -423.742, y = -1564.256, z = 24.752, rotation = 350.530, speed = 45.0 },
+    { x = -980.685, y = -2491.565, z = 13.898, rotation = 151.314, speed = 60.0 },
+    { x = -860.708, y = -2566.927, z = 13.785, rotation = 331.449, speed = 60.0 },
+    { x = -958.207, y = -2766.583, z = 13.693, rotation = 151.829, speed = 45.0 }
+}
+
+function FX_PlayerTpStunt(alive)
+    local playerPed = PlayerPedId()
+    local loc = allPossibleJumps[math.random(1, #allPossibleJumps)]
+
+    DoScreenFadeOut(50)
+    Citizen.Wait(50)
+    SetEntityCoordsNoOffset(playerPed, loc.x, loc.y, loc.z, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+
+    local veh
+    if not IsPedInAnyVehicle(playerPed, false) then
+        local batiHash = GetHashKey("bati")
+        RequestModel(batiHash)
+        while not HasModelLoaded(batiHash) do
+            Citizen.Wait(0)
+        end
+        local pos = GetEntityCoords(playerPed, false)
+        local heading = GetEntityHeading(playerPed)
+        veh = CreateVehicle(batiHash, pos.x, pos.y, pos.z, heading, true, false)
+        SetModelAsNoLongerNeeded(batiHash)
+        SetPedIntoVehicle(playerPed, veh, -1)
+    else
+        veh = GetVehiclePedIsIn(playerPed, false)
+    end
+
+    SetEntityVelocity(veh, 0.0, 0.0, 0.0)
+    SetEntityRotation(veh, 0.0, 0.0, loc.rotation, 2, true)
+    SetVehicleForwardSpeed(veh, loc.speed)
+end
+
+function FX_VehRandomseat(alive)
+    local playerPed = PlayerPedId()
+    if not IsPedInAnyVehicle(playerPed, false) then return end
+    local playerVeh = GetVehiclePedIsIn(playerPed, false)
+    local maxSeats = GetVehicleModelNumberOfSeats(GetEntityModel(playerVeh))
+    local seats = {}
+    for i = -1, maxSeats - 2 do
+        if IsVehicleSeatFree(playerVeh, i, false) then
+            table.insert(seats, i)
+        end
+    end
+    if #seats > 0 then
+        SetPedIntoVehicle(playerPed, playerVeh, seats[math.random(#seats)])
+    end
+end
+
+function FX_PlayerRapidFire(alive)
+    while alive() do
+        local playerPed = PlayerPedId()
+        if IsPlayerFreeAiming(PlayerId()) then
+            local weaponHash = GetSelectedPedWeapon(playerPed)
+            if weaponHash ~= GetHashKey("WEAPON_UNARMED") then
+                local camCoords = GetGameplayCamCoord()
+                local targPos = camCoords + vector3(
+                    math.sin(GetGameplayCamRot(2).z * math.pi/180) * -1,
+                    math.cos(GetGameplayCamRot(2).z * math.pi/180) * -1,
+                    math.sin(GetGameplayCamRot(2).x * math.pi/180)
+                ) * 500.0
+                ShootSingleBulletBetweenCoords(camCoords.x, camCoords.y, camCoords.z,
+                    targPos.x, targPos.y, targPos.z, 5, true, weaponHash, playerPed, true, false, 1.0)
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_PlayerRocket(alive)
+    local playerPed = PlayerPedId()
+    local parachuteHash = GetHashKey("GADGET_PARACHUTE")
+    ClearPedTasksImmediately(playerPed)
+    SetPedToRagdoll(playerPed, 10000, 10000, 0, true, true, false)
+    GiveWeaponToPed(playerPed, parachuteHash, 1, true, false)
+    local lastTimestamp = GetGameTimer()
+    local launchTimer = 5000
+    local beepTimer = 5000
+    while true do
+        SetEntityInvincible(playerPed, true)
+        local curTimestamp = GetGameTimer()
+        launchTimer = launchTimer - (curTimestamp - lastTimestamp)
+        lastTimestamp = curTimestamp
+        if launchTimer < beepTimer then
+            beepTimer = beepTimer * 0.8
+            UseParticleFxAsset("core")
+            PlaySoundFromEntity(-1, "Beep_Red", playerPed, "DLC_HEIST_HACKING_SNAKE_SOUNDS", true, false)
+            StartParticleFxLoopedOnEntity("exp_air_molotov", playerPed, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, false, false, false)
+            SetEntityVelocity(playerPed, 0.0, 0.0, 5.0)
+            if launchTimer <= 0 then
+                SetEntityHealth(playerPed, 0)
+                AddExplosion(
+                    GetEntityCoords(playerPed).x, GetEntityCoords(playerPed).y, GetEntityCoords(playerPed).z,
+                    9, 100.0, true, false, 3.0, false
+                )
+                break
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_PlayerTpclosestveh(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local playerVeh = GetVehiclePedIsIn(playerPed, false)
+    local closestVeh = 0
+    local closestDist = 9999.0
+    for _, veh in ipairs(GetGamePool('CVehicle')) do
+        if DoesEntityExist(veh) and veh ~= playerVeh then
+            local vehPos = GetEntityCoords(veh, false)
+            local dist = #(vehPos - playerPos)
+            if dist < closestDist then
+                closestVeh = veh
+                closestDist = dist
+            end
+        end
+    end
+    if closestVeh ~= 0 and IsVehicleSeatFree(closestVeh, -1, false) then
+        SetPedIntoVehicle(playerPed, closestVeh, -1)
+    end
+end
+
+function FX_PlayerSetintorandveh(alive)
+    local playerPed = PlayerPedId()
+    local playerVeh = GetVehiclePedIsIn(playerPed, false)
+    local vehs = {}
+    for _, veh in ipairs(GetGamePool('CVehicle')) do
+        if DoesEntityExist(veh) and veh ~= playerVeh and IsVehicleSeatFree(veh, -1, false) then
+            table.insert(vehs, veh)
+        end
+    end
+    if #vehs > 0 then
+        SetPedIntoVehicle(playerPed, vehs[math.random(#vehs)], -1)
+    end
+end
+
+function FX_PlayerSimeonsays(alive)
+    local actions = {
+        {name = "Jump", control = 22},
+        {name = "Aim", control = 25},
+        {name = "Attack", control = 24},
+        {name = "Sprint", control = 21},
+        {name = "Duck", control = 36},
+        {name = "Reload", control = 45},
+    }
+    local action = actions[math.random(#actions)]
+    local opposite = math.random(0, 1) == 1
+    local displayName = (opposite and "DON'T " or "") .. action.name .. "!"
+    local lastTime = 0
+    local waitTime = 2000
+    local dead = false
+    BeginTextCommandThefeedPost("STRING")
+    AddTextComponentSubstringPlayerName(displayName)
+    EndTextCommandThefeedPostTicker(false, false)
+    while alive() do
+        local playerPed = PlayerPedId()
+        if IsPedDeadOrDying(playerPed, true) then
+            if not dead then
+                dead = true
+                BeginTextCommandThefeedPost("STRING")
+                AddTextComponentSubstringPlayerName("FAILED: You died!")
+                EndTextCommandThefeedPostTicker(true, true)
+            end
+            Citizen.Wait(100)
+        else
+            local curTime = GetGameTimer()
+            if curTime - lastTime > waitTime then
+                BeginTextCommandThefeedPost("STRING")
+                AddTextComponentSubstringPlayerName("FAILED: Time's up!")
+                EndTextCommandThefeedPostTicker(true, true)
+                SetEntityHealth(playerPed, 0)
+                break
+            end
+            if IsControlJustPressed(0, action.control) then
+                if not opposite then
+                    BeginTextCommandThefeedPost("STRING")
+                    AddTextComponentSubstringPlayerName("PASSED: Good job!")
+                    EndTextCommandThefeedPostTicker(false, false)
+                    break
+                else
+                    BeginTextCommandThefeedPost("STRING")
+                    AddTextComponentSubstringPlayerName("FAILED: I said DON'T " .. action.name .. "!")
+                    EndTextCommandThefeedPostTicker(true, true)
+                    SetEntityHealth(playerPed, 0)
+                    break
+                end
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_PlayerSuicide(alive)
+    local playerPed = PlayerPedId()
+    if not IsPedInAnyVehicle(playerPed, false) and IsPedOnFoot(playerPed)
+    and GetPedParachuteState(playerPed) == -1 then
+        RequestAnimDict("mp_suicide")
+        while not HasAnimDictLoaded("mp_suicide") do
+            Citizen.Wait(0)
+        end
+        local pistolHash = GetHashKey("WEAPON_PISTOL")
+        GiveWeaponToPed(playerPed, pistolHash, 1, true, true)
+        TaskPlayAnim(playerPed, "mp_suicide", "pistol", 8.0, -1.0, 800, 1, 0.0, false, false, false)
+        Citizen.Wait(750)
+        SetPedShootsAtCoord(playerPed, 0.0, 0.0, 0.0, true)
+        RemoveAnimDict("mp_suicide")
+    end
+    SetEntityHealth(playerPed, 0)
+end
+
+function FX_PlayerSuperrun(alive)
+    local playerId = PlayerId()
+    while alive() do
+        SetRunSprintMultiplierForPlayer(playerId, 1.49)
+        SetSuperJumpThisFrame(playerId)
+        Citizen.Wait(0)
+    end
+    SetRunSprintMultiplierForPlayer(playerId, 1.0)
+end
+
+function FX_TpLsairport(alive)
+    local playerPed = PlayerPedId()
+    DoScreenFadeOut(50)
+    Citizen.Wait(50)
+    SetEntityCoordsNoOffset(playerPed, -1388.6, -3111.61, 13.94, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+end
+
+function FX_TpMazebank(alive)
+    local playerPed = PlayerPedId()
+    DoScreenFadeOut(50)
+    Citizen.Wait(50)
+    SetEntityCoordsNoOffset(playerPed, -75.7, -818.62, 326.16, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+end
+
+function FX_TpFortzancudo(alive)
+    SetEntityCoords(PlayerPedId(), -2050.0, 3200.0, 35.0, false, false, false, true)
+end
+
+function FX_TpMountchilliad(alive)
+    SetEntityCoords(PlayerPedId(), 450.0, 5600.0, 800.0, false, false, false, true)
+end
+
+function FX_TpSkyfall(alive)
+    local playerPed = PlayerPedId()
+    DoScreenFadeOut(100)
+    Citizen.Wait(100)
+    SetEntityCoordsNoOffset(playerPed, 935.0, 3800.0, 2300.0, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+end
+
+function FX_PlayerTptowaypoint(alive)
+    local waypoint = GetFirstBlipInfoId(8)
+    if DoesBlipExist(waypoint) then
+        local coords = GetBlipInfoIdCoord(waypoint)
+        local _, z = GetGroundZFor3dCoord(coords.x, coords.y, 500.0, 0.0, false, false)
+        SetEntityCoords(PlayerPedId(), coords.x, coords.y, z + 5.0, false, false, false, true)
+    end
+end
+
+function FX_PlayerTptowaypointopposite(alive)
+    local waypoint = GetFirstBlipInfoId(8)
+    if DoesBlipExist(waypoint) then
+        local coords = GetBlipInfoIdCoord(waypoint)
+        local playerPos = GetEntityCoords(PlayerPedId(), false)
+        local opposite = vector3(
+            playerPos.x + (playerPos.x - coords.x),
+            playerPos.y + (playerPos.y - coords.y),
+            coords.z
+        )
+        local _, z = GetGroundZFor3dCoord(opposite.x, opposite.y, 500.0, 0.0, false, false)
+        SetEntityCoords(PlayerPedId(), opposite.x, opposite.y, z + 5.0, false, false, false, true)
+    end
+end
+
+function FX_PlayerTpfront(alive)
+    local ped = PlayerPedId()
+    local coords = GetEntityCoords(ped, false)
+    local heading = GetEntityHeading(ped)
+    local x = coords.x + math.sin(math.rad(heading)) * -50
+    local y = coords.y + math.cos(math.rad(heading)) * -50
+    local _, z = GetGroundZFor3dCoord(x, y, 500.0, 0.0, false, false)
+    SetEntityCoords(ped, x, y, z + 5.0, false, false, false, true)
+end
+
+function FX_TpRandom(alive)
+    local x = math.random(-3000, 3000) + 0.0
+    local y = math.random(-3000, 3000) + 0.0
+    local _, z = GetGroundZFor3dCoord(x, y, 500.0, 0.0, false, false)
+    SetEntityCoords(PlayerPedId(), x, y, z + 5.0, false, false, false, true)
+end
+
+function FX_TpMission(alive)
+    local playerPed = PlayerPedId()
+    local blips = {}
+    for _, blip in ipairs({GetFirstBlipInfoId(1)}) do
+        -- mission blips
+    end
+    local x = math.random(-500, 500) + 0.0
+    local y = math.random(-500, 500) + 0.0
+    local _, z = GetGroundZFor3dCoord(x, y, 500.0, 0.0, false, false)
+    SetEntityCoords(playerPed, x, y, z + 5.0, false, false, false, true)
+end
+
+function FX_TpFake(alive)
+    -- Hooks::EnableScriptThreadBlock
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+
+    local fakeTpTypes = {
+        { id = "tp_lsairport", coords = vector3(-1388.6, -3111.61, 13.94) },
+        { id = "tp_mazebanktower", coords = vector3(-75.7, -818.62, 326.16) },
+        { id = "tp_skyfall", coords = vector3(935.0, 3800.0, 2300.0) },
+        { id = "player_tp_store" },
+        { id = "tp_random" }
+    }
+
+    local chosen = fakeTpTypes[math.random(1, #fakeTpTypes)]
+    -- CurrentEffect::OverrideEffectNameFromId
+
+    DoScreenFadeOut(100)
+    Citizen.Wait(100)
+    if chosen.coords then
+        SetEntityCoordsNoOffset(playerPed, chosen.coords.x, chosen.coords.y, chosen.coords.z, false, false, false)
+    elseif chosen.id == "player_tp_store" then
+        local stores = {
+            vector3(372.29, 326.39, 103.57),
+            vector3(-1487.29, -376.92, 40.16),
+            vector3(810.94, -2157.19, 29.62),
+            vector3(72.3, -1399.1, 28.4)
+        }
+        SetEntityCoordsNoOffset(playerPed, stores[math.random(1, #stores)].x, stores[math.random(1, #stores)].y, stores[math.random(1, #stores)].z, false, false, false)
+    else
+        local randX = (math.random() * 8000.0) - 4000.0
+        local randY = (math.random() * 12000.0) - 4000.0
+        SetEntityCoordsNoOffset(playerPed, randX, randY, 500.0, false, false, false)
+    end
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+
+    Citizen.Wait(math.random(3500, 6000))
+
+    DoScreenFadeOut(100)
+    Citizen.Wait(100)
+    SetEntityCoordsNoOffset(playerPed, playerPos.x, playerPos.y, playerPos.z, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+
+    -- Hooks::DisableScriptThreadBlock
+end
+
+function FX_TpFakex2(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+
+    DoScreenFadeOut(100)
+    Citizen.Wait(100)
+    SetEntityCoordsNoOffset(playerPed, 935.0, 3800.0, 2300.0, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+
+    Citizen.Wait(math.random(3500, 6000))
+
+    -- Now fake-teleport back to a different fake destination
+    local fakeDest = vector3(-75.7, -818.62, 326.16)
+    DoScreenFadeOut(100)
+    Citizen.Wait(100)
+    SetEntityCoordsNoOffset(playerPed, fakeDest.x, fakeDest.y, fakeDest.z, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+
+    -- CurrentEffect::OverrideEffectNameFromId
+    Citizen.Wait(math.random(3500, 6000))
+
+    DoScreenFadeOut(100)
+    Citizen.Wait(100)
+    SetEntityCoordsNoOffset(playerPed, playerPos.x, playerPos.y, playerPos.z, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+end
+
+function FX_PlayerTpeverything(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    for _, ped in ipairs(GetGamePool('CPed')) do
+        if DoesEntityExist(ped) and not IsPedAPlayer(ped) and not IsEntityAMissionEntity(ped) then
+            SetEntityCoords(ped, playerPos.x + math.random(-3, 3), playerPos.y + math.random(-3, 3), playerPos.z, false, false, false, true)
+        end
+    end
+    for _, veh in ipairs(GetGamePool('CVehicle')) do
+        if DoesEntityExist(veh) and not IsPedInVehicle(playerPed, veh, false) and not IsEntityAMissionEntity(veh) then
+            SetEntityCoords(veh, playerPos.x + math.random(-5, 5), playerPos.y + math.random(-5, 5), playerPos.z + 3.0, false, false, false, true)
+        end
+    end
+end
+
+function FX_PlayerTpToEverything(alive)
+    while alive() do
+        local allEntities = {}
+        for _, ped in ipairs(GetGamePool('CPed')) do
+            if DoesEntityExist(ped) and not IsPedAPlayer(ped) then
+                table.insert(allEntities, ped)
+            end
+        end
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            if DoesEntityExist(veh) then
+                table.insert(allEntities, veh)
+            end
+        end
+        if #allEntities > 0 then
+            local target = allEntities[math.random(#allEntities)]
+            local coords = GetEntityCoords(target, false)
+            SetEntityCoords(PlayerPedId(), coords.x, coords.y, coords.z + 2.0, false, false, false, true)
+        end
+        Citizen.Wait(3000)
+    end
+end
+
+local allPossibleStores = {
+    { x = 372.292, y = 326.394, z = 103.566 },
+    { x = 24.215, y = -1347.262, z = 29.497 },
+    { x = 2557.175, y = 380.645, z = 108.623 },
+    { x = -3038.267, y = 584.475, z = 7.909 },
+    { x = -3242.267, y = 999.763, z = 12.831 },
+    { x = 549.443, y = 2671.219, z = 42.157 },
+    { x = 1959.919, y = 3740.001, z = 32.344 },
+    { x = 1727.784, y = 6415.341, z = 35.037 },
+    { x = 2677.931, y = 3279.302, z = 55.241 },
+    { x = -2966.301, y = 391.582, z = 15.043 },
+    { x = -1487.285, y = -376.923, z = 40.163 },
+    { x = -1221.323, y = -908.128, z = 12.326 },
+    { x = 1134.055, y = -983.325, z = 46.416 },
+    { x = 1165.231, y = 2710.969, z = 38.158 },
+    { x = -705.916, y = -913.413, z = 19.216 },
+    { x = -46.959, y = -1758.964, z = 29.421 },
+    { x = 1165.163, y = -323.874, z = 69.205 },
+    { x = -1819.513, y = 793.641, z = 138.085 },
+    { x = 1697.140, y = 4923.413, z = 42.064 },
+    { x = 810.94, y = -2157.19, z = 29.62 },
+    { x = 21.15, y = -1106.44, z = 29.8 },
+    { x = 842.55, y = -1033.72, z = 28.19 },
+    { x = -662.42, y = -935.19, z = 21.83 },
+    { x = -1305.54, y = -394.7, z = 36.7 },
+    { x = 251.97, y = -50.19, z = 69.94 },
+    { x = 2567.91, y = 294.05, z = 108.73 },
+    { x = 1693.32, y = 3760.19, z = 34.70 },
+    { x = -330.61, y = 6084.02, z = 31.45 },
+    { x = -1118.11, y = 2698.71, z = 18.55 },
+    { x = 72.3, y = -1399.1, z = 28.4 },
+    { x = -703.8, y = -152.3, z = 36.4 },
+    { x = -167.9, y = -299.0, z = 38.7 },
+    { x = 428.7, y = -800.1, z = 28.5 },
+    { x = -829.4, y = -1073.7, z = 10.3 },
+    { x = -1447.8, y = -242.5, z = 48.8 },
+    { x = 11.6, y = 6514.2, z = 30.9 },
+    { x = 123.6, y = -219.4, z = 53.6 },
+    { x = 1696.3, y = 4829.3, z = 41.1 },
+    { x = 618.1, y = 2759.6, z = 41.1 },
+    { x = 1190.6, y = 2713.4, z = 37.2 },
+    { x = -1193.4, y = -772.3, z = 16.3 },
+    { x = -3172.5, y = 1048.1, z = 19.9 },
+    { x = -1108.4, y = 2708.9, z = 18.1 }
+}
+
+function FX_PlayerTpStore(alive)
+    local playerPed = PlayerPedId()
+    local loc = allPossibleStores[math.random(1, #allPossibleStores)]
+    DoScreenFadeOut(50)
+    Citizen.Wait(50)
+    SetEntityCoordsNoOffset(playerPed, loc.x, loc.y, loc.z, false, false, false)
+    Citizen.Wait(0)
+    DoScreenFadeIn(200)
+end
+
+function FX_PlayerVr(alive)
+    local playerPed = PlayerPedId()
+    local heading = GetEntityHeading(playerPed)
+    local coords = GetEntityCoords(playerPed, true)
+    local rot = GetEntityRotation(playerPed, 0)
+    local pedType = GetPedType(playerPed)
+    local model = GetEntityModel(playerPed)
+    RequestModel(model)
+    while not HasModelLoaded(model) do Citizen.Wait(0) end
+    local clone = CreatePed(pedType, model, coords.x, coords.y, coords.z, heading, true, false)
+    ClonePedToTarget(playerPed, clone)
+    local _, groundZ = GetGroundZFor3dCoord(coords.x, coords.y, coords.z, 0.0, false, false)
+    local cloneVeh = nil
+    if IsPedInAnyVehicle(playerPed, false) then
+        local playerVeh = GetVehiclePedIsIn(playerPed, false)
+        local vehModel = GetEntityModel(playerVeh)
+        RequestModel(vehModel)
+        while not HasModelLoaded(vehModel) do Citizen.Wait(0) end
+        local vehCoords = GetEntityCoords(playerVeh, false)
+        cloneVeh = CreateVehicle(vehModel, vehCoords.x, vehCoords.y, vehCoords.z + 1.0, GetEntityHeading(playerVeh), true, false)
+        SetPedIntoVehicle(clone, cloneVeh, -1)
+        SetVehicleEngineOn(cloneVeh, GetIsVehicleEngineRunning(playerVeh), true, false)
+        SetVehicleForwardSpeed(cloneVeh, GetEntitySpeed(playerVeh))
+        local vel = GetEntityVelocity(playerVeh)
+        SetEntityVelocity(cloneVeh, vel.x, vel.y, vel.z)
+        SetModelAsNoLongerNeeded(vehModel)
+    end
+    SetModelAsNoLongerNeeded(model)
+    while alive() do
+        local targetHeading = GetEntityHeading(playerPed)
+        heading = heading + (targetHeading - heading) * 0.15
+        SetEntityHeading(clone, heading)
+        local targCoords = GetEntityCoords(playerPed, true)
+        local _, gz = GetGroundZFor3dCoord(targCoords.x, targCoords.y, targCoords.z, 0.0, false, false)
+        coords = vector3(
+            coords.x + (targCoords.x - coords.x) * 0.15,
+            coords.y + (targCoords.y - coords.y) * 0.15,
+            coords.z + (groundZ - coords.z) * 0.15
+        )
+        SetEntityCoords(clone, coords.x, coords.y, coords.z, true, false, false, true)
+        Citizen.Wait(0)
+    end
+    if DoesEntityExist(clone) then DeleteEntity(clone) end
+    if cloneVeh and DoesEntityExist(cloneVeh) then DeleteVehicle(cloneVeh) end
+end
+
+function FX_PlayerWalkonwater(alive)
+    local waterObj = 0
+    local displayHash = GetHashKey("prop_huge_display_01")
+    while alive() do
+        local playerPed = PlayerPedId()
+        local playerCoord = GetEntityCoords(playerPed, true)
+        RequestModel(displayHash)
+        while not HasModelLoaded(displayHash) do Citizen.Wait(0) end
+        if not DoesEntityExist(waterObj) then
+            waterObj = CreateObject(displayHash, playerCoord.x, playerCoord.y, playerCoord.z - 0.5, true, true, true)
+            SetEntityRotation(waterObj, 90.0, 0.0, 0.0, 2, true)
+            FreezeEntityPosition(waterObj, true)
+            SetEntityVisible(waterObj, false, false)
+        else
+            SetEntityCoords(waterObj, playerCoord.x, playerCoord.y, playerCoord.z - 0.5, true, false, false, true)
+        end
+        SetModelAsNoLongerNeeded(displayHash)
+        Citizen.Wait(0)
+    end
+    if DoesEntityExist(waterObj) then DeleteObject(waterObj) end
+end
+
+function FX_Player5stars(alive)
+    SetPlayerWantedLevel(PlayerId(), 5, false)
+    SetPlayerWantedLevelNow(PlayerId(), false)
+end
+
+function FX_PlayerPlus2stars(alive)
+    local player = PlayerId()
+    local wantedLevel = GetPlayerWantedLevel(player)
+    SetPlayerWantedLevel(player, wantedLevel + 2, false)
+    SetPlayerWantedLevelNow(player, false)
+end
+
+function FX_PlayerNeverwanted(alive)
+    while alive() do
+        SetPlayerWantedLevel(PlayerId(), 0, false)
+        SetPlayerWantedLevelNow(PlayerId(), true)
+        Citizen.Wait(0)
+    end
+end
+
+function FX_Player3stars(alive)
+    SetPlayerWantedLevel(PlayerId(), 3, false)
+    SetPlayerWantedLevelNow(PlayerId(), false)
+end
+
+function FX_Player1star(alive)
+    SetPlayerWantedLevel(PlayerId(), 1, false)
+    SetPlayerWantedLevelNow(PlayerId(), false)
+end
+
+function FX_PlayerFakestars(alive)
+    SetFakeWantedLevel(5)
+    Citizen.Wait(5000)
+    SetFakeWantedLevel(0)
+end
+
+function FX_PlayerAllweps(alive)
+    local ped = PlayerPedId()
+    local weapons = {
+        GetHashKey("WEAPON_PISTOL"), GetHashKey("WEAPON_SMG"), GetHashKey("WEAPON_ASSAULTRIFLE"),
+        GetHashKey("WEAPON_PUMPSHOTGUN"), GetHashKey("WEAPON_SNIPERRIFLE"), GetHashKey("WEAPON_RPG"),
+        GetHashKey("WEAPON_GRENADE"), GetHashKey("WEAPON_MOLOTOV"), GetHashKey("WEAPON_MINIGUN"),
+        GetHashKey("WEAPON_COMBATMG"), GetHashKey("WEAPON_STICKYBOMB"), GetHashKey("WEAPON_RAILGUN"),
+    }
+    for _, weapon in ipairs(weapons) do
+        GiveWeaponToPed(ped, weapon, 999, false, false)
+    end
+end
+
+local zoomCamera = 0
+local camZoom = 80.0
+local camZoomRate = 0.15
+local minZoom = 10.0
+local maxZoom = 120.0
+local zoomMidpoint = (maxZoom - minZoom) / 2.0 + minZoom
+local zoomMultiplier = maxZoom - zoomMidpoint
+
+function FX_PlayerZoomzoomCam(alive)
+    zoomCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    RenderScriptCams(true, true, 10, true, true)
+
+    while alive() do
+        local curTick = GetGameTimer()
+        camZoom = math.sin(curTick * camZoomRate) * zoomMultiplier + zoomMidpoint
+        SetCamActive(zoomCamera, true)
+        local coord = GetGameplayCamCoord()
+        local rot = GetGameplayCamRot(2)
+        SetCamParams(zoomCamera, coord.x, coord.y, coord.z, rot.x, rot.y, rot.z, camZoom, 0, 1, 1, 2)
+        Citizen.Wait(0)
+    end
+
+    SetCamActive(zoomCamera, false)
+    RenderScriptCams(false, true, 700, true, true)
+    DestroyCam(zoomCamera, true)
+    zoomCamera = 0
+end
+
+local fovCamera = 0
+
+function FX_PlayerBinoculars(alive)
+    fovCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    RenderScriptCams(true, true, 700, true, true)
+
+    while alive() do
+        SetCamActive(fovCamera, true)
+        local coord = GetGameplayCamCoord()
+        local rot = GetGameplayCamRot(2)
+        SetCamParams(fovCamera, coord.x, coord.y, coord.z, rot.x, rot.y, rot.z, 10.0, 0, 1, 1, 2)
+        Citizen.Wait(0)
+    end
+
+    SetCamActive(fovCamera, false)
+    RenderScriptCams(false, true, 700, true, true)
+    DestroyCam(fovCamera, true)
+    fovCamera = 0
+end
+
+function FX_ScreenBouncyradar(alive)
+    while alive() do
+        ShakeGameplayCam("HAND_SHAKE", 0.5)
+        Citizen.Wait(0)
+    end
+    StopGameplayCamShaking(true)
+end
+
+function FX_MiscDvdscreensaver(alive)
+    while alive() do
+        SetTimecycleModifier("scanline_cam_cheap")
+        SetTimecycleModifierStrength(0.5)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+local flippedCamera = 0
+
+function FX_PlayerFlipCamera(alive)
+    flippedCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    RenderScriptCams(true, true, 700, true, true)
+
+    while alive() do
+        SetCamActive(flippedCamera, true)
+        local coord = GetGameplayCamCoord()
+        local rot = GetGameplayCamRot(2)
+        local fov = GetGameplayCamFov()
+        SetCamParams(flippedCamera, coord.x, coord.y, coord.z, rot.x, 180.0, rot.z, fov, 700, 0, 0, 2)
+        Citizen.Wait(0)
+    end
+
+    SetCamActive(flippedCamera, false)
+    RenderScriptCams(false, true, 700, true, true)
+    DestroyCam(flippedCamera, true)
+    flippedCamera = 0
+end
+
+function FX_MiscFlipUi(alive)
+    while alive() do
+        SetTimecycleModifier("CAMERA_BW")
+        SetTimecycleModifierStrength(0.5)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_PlayerHeatvision(alive)
+    while alive() do
+        SetSeethrough(true)
+        Citizen.Wait(0)
+    end
+    SetSeethrough(false)
+end
+
+function FX_ScreenMaximap(alive)
+    while alive() do
+        -- Memory::MultiplyRadarSize(5.4, 0.1)
+        Citizen.Wait(100)
+    end
+    -- Memory::ResetRadar
+end
+
+function FX_PlayerNightvision(alive)
+    while alive() do
+        SetNightvision(true)
+        Citizen.Wait(0)
+    end
+    SetNightvision(false)
+end
+
+function FX_NoHud(alive)
+    while alive() do
+        HideHudAndRadarThisFrame()
+        DisableControlAction(0, 199, true)
+        DisableControlAction(0, 200, true)
+        Citizen.Wait(0)
+    end
+end
+
+function FX_NoRadar(alive)
+    while alive() do
+        DisplayRadar(false)
+        DisableControlAction(0, 199, true)
+        DisableControlAction(0, 200, true)
+        Citizen.Wait(0)
+    end
+    DisplayRadar(true)
+end
+
+local TV_PLAYLISTS = {
+    "PL_WEB_KFLF",
+    "PL_WEB_RANGERS",
+    "PL_WEB_PRB2",
+    "PL_WEB_FOS",
+    "PL_WEB_CAS",
+    "PL_WEB_HOWITZER",
+    "PL_WEB_RS",
+    "PL_STD_CNT",
+    "PL_STD_WZL",
+    "PL_LO_CNT",
+    "PL_LO_WZL",
+    "PL_SP_WORKOUT",
+    "PL_SP_INV",
+    "PL_SP_INV_EXP",
+    "PL_LO_RS",
+    "PL_LO_RS_CUTSCENE",
+    "PL_SP_PLSH1_INTRO",
+    "PL_LES1_FAME_OR_SHAME",
+    "PL_STD_WZL_FOS_EP2",
+    "PL_MP_WEAZEL",
+    "PL_MP_CCTV",
+    "PL_CINEMA_CARTOON",
+    "PL_CINEMA_ARTHOUSE",
+    "PL_CINEMA_ACTION",
+    "PL_CINEMA_MULTIPLAYER",
+    "PL_CINEMA_MULTIPLAYER_NO_MELTDOWN"
+}
+local ms_PosX = 0.0
+local ms_PosY = 0.0
+
+function FX_PlayerOnDemandCartoon(alive)
+    local playlist = TV_PLAYLISTS[math.random(1, #TV_PLAYLISTS)]
+    SetTvChannelPlaylistAtHour(0, playlist, math.random(0, 23))
+    SetTvAudioFrontend(true)
+    SetTvVolume(1.0)
+    AttachTvAudioToEntity(PlayerPedId())
+    SetTvChannel(0)
+    EnableMovieSubtitles(true)
+    ms_PosX = (math.random() * 0.4) + 0.3
+    ms_PosY = (math.random() * 0.4) + 0.3
+
+    while alive() do
+        SetScriptGfxDrawOrder(4)
+        SetScriptGfxDrawBehindPausemenu(true)
+        DrawTvChannel(ms_PosX, ms_PosY, 0.3, 0.3, 0.0, 255, 255, 255, 255)
+        Citizen.Wait(0)
+    end
+
+    SetTvChannel(-1)
+    SetTvChannelPlaylist(0, "", false)
+    EnableMovieSubtitles(false)
+end
+
+local fovCamera = 0
+
+function FX_PlayerQuakeFov(alive)
+    fovCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    RenderScriptCams(true, true, 700, true, true)
+
+    while alive() do
+        SetCamActive(fovCamera, true)
+        local coord = GetGameplayCamCoord()
+        local rot = GetGameplayCamRot(2)
+        SetCamParams(fovCamera, coord.x, coord.y, coord.z, rot.x, rot.y, rot.z, 120.0, 0, 1, 1, 2)
+        Citizen.Wait(0)
+    end
+
+    SetCamActive(fovCamera, false)
+    RenderScriptCams(false, true, 700, true, true)
+    DestroyCam(fovCamera, true)
+    fovCamera = 0
+end
+
+function FX_ScreenRealfp(alive)
+    local cam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    AttachCamToEntity(cam, PlayerPedId(), 0.0, 0.0, 0.65, true)
+    SetCamFov(cam, 90.0)
+    RenderScriptCams(true, true, 500, true, true)
+    SetCamActive(cam, true)
+    while alive() do
+        Citizen.Wait(0)
+    end
+    RenderScriptCams(false, true, 500, true, true)
+    DestroyCam(cam, true)
+end
+
+function FX_PlayerSickCam(alive)
+    local sickCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", 1)
+    RenderScriptCams(true, true, 10, 1, 1, 1)
+    local camZoom = 80.0
+    local camZoomRate = 0.4
+    local camRotX = 0.0
+    local camRotXRate = 0.4
+    local camRotY = 0.0
+    local camRotYRate = 0.6
+    while alive() do
+        camZoom = camZoom + camZoomRate
+        if camZoom > 120 or camZoom < 40 then camZoomRate = -camZoomRate end
+        camRotX = camRotX + camRotXRate
+        if camRotX > 10 or camRotX < -10 then camRotXRate = -camRotXRate end
+        camRotY = camRotY + camRotYRate
+        if camRotY > 15 or camRotY < -15 then camRotYRate = -camRotYRate end
+        SetCamParams(sickCamera, GetEntityCoords(PlayerPedId()).x, GetEntityCoords(PlayerPedId()).y,
+            GetEntityCoords(PlayerPedId()).z, camRotX, camRotY, GetEntityHeading(PlayerPedId()), camZoom, 0, 0, 1, 2)
+        SetCamActive(sickCamera, true)
+        Citizen.Wait(0)
+    end
+    SetCamActive(sickCamera, false)
+    RenderScriptCams(false, true, 700, 1, 1, 1)
+    DestroyCam(sickCamera, true)
+end
+
+local spinningCamera = 0
+local camRot = 0.0
+local camRotRate = 1.2

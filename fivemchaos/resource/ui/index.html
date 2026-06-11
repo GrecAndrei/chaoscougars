@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chaos Mod HUD</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+</style>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="hud" class="hud-container">
+
+  <div id="cougar-counter" class="cougar-counter hidden">
+    <span class="cougar-icon">&#x1f43e;</span>
+    <span id="cougar-count" class="cougar-count">0</span>
+  </div>
+
+  <div id="timer-bar" class="timer-bar hidden">
+    <div id="timer-fill" class="timer-fill"></div>
+    <div id="timer-label" class="timer-label"></div>
+  </div>
+
+  <div id="effects-list" class="effects-list"></div>
+
+  <div id="vote-panel" class="vote-panel hidden">
+    <div class="vote-header">
+      <span class="vote-title">VOTE</span>
+      <span id="vote-time" class="vote-time">10s</span>
+    </div>
+    <div id="vote-options" class="vote-options"></div>
+  </div>
+
+  <div id="hit-container" class="hit-container"></div>
+
+  <div id="phase-overlay" class="phase-overlay hidden">
+    <div id="phase-text" class="phase-text"></div>
+  </div>
+
+  <!-- Admin Panel (F5 to toggle) -->
+  <div id="admin-panel" class="admin-panel hidden">
+    <div class="panel-header">
+      <span class="panel-title">CHAOS CONTROL</span>
+      <span class="panel-close" id="panel-close">&times;</span>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-label">Mission</div>
+      <div class="panel-row">
+        <button class="panel-btn btn-start" data-action="start">Start Run</button>
+        <button class="panel-btn btn-stop" data-action="stop">Stop Run</button>
+        <button class="panel-btn" data-action="pause">Pause</button>
+        <button class="panel-btn" data-action="resume">Resume</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-label">Quick Effects</div>
+      <div class="panel-row">
+        <button class="panel-btn btn-effect" data-effect="low_gravity">Low Gravity</button>
+        <button class="panel-btn btn-effect" data-effect="drunk">Drunk</button>
+        <button class="panel-btn btn-effect" data-effect="super_speed">Super Speed</button>
+        <button class="panel-btn btn-effect" data-effect="bouncy_cars">Bouncy Cars</button>
+        <button class="panel-btn btn-effect" data-effect="beyblade">Beyblade</button>
+        <button class="panel-btn btn-effect" data-effect="launch_cars">Launch Cars</button>
+        <button class="panel-btn btn-effect" data-effect="meteor_rain">Meteors</button>
+        <button class="panel-btn btn-effect" data-effect="lsd">LSD</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-label">Spawn</div>
+      <div class="panel-row">
+        <button class="panel-btn" data-action="spawn_cougar">Spawn Cougar</button>
+        <button class="panel-btn" data-action="spawn_swarm">Spawn Swarm</button>
+        <button class="panel-btn" data-action="spawn_bomber">Spawn Bomber</button>
+        <button class="panel-btn" data-action="kill_cougars">Kill All Cougars</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-label">Custom Effect ID</div>
+      <input class="panel-input" id="effect-input" type="text" placeholder="e.g. black_hole, flip_cars, airstrike...">
+    </div>
+
+    <div class="panel-section">
+      <div class="section-label">Status</div>
+      <div class="panel-stat"><span class="stat-label">Phase</span><span class="stat-value" id="stat-phase">LOBBY</span></div>
+      <div class="panel-stat"><span class="stat-label">Difficulty</span><span class="stat-value" id="stat-diff">0%</span></div>
+      <div class="panel-stat"><span class="stat-label">Cougars</span><span class="stat-value" id="stat-cougars">0</span></div>
+    </div>
+  </div>
+
+</div>
+<script src="app.js" defer></script>
+</body>
+</html>

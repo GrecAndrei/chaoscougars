@@ -1,0 +1,104 @@
+You are a senior frontend developer. Generate a complete FiveM NUI (browser-based in-game UI) for a chaos mod HUD. Output exactly three files separated by markers. Use these exact markers on their own line:
+
+===FILE: index.html===
+===FILE: style.css===
+===FILE: app.js===
+
+Do NOT wrap code in markdown code blocks. Just output raw code after each marker.
+
+## Requirements
+
+### Architecture
+- index.html loads style.css and app.js
+- app.js listens for NUI messages via window.addEventListener('message', ...)
+- All UI updates are driven by incoming messages from the FiveM Lua client
+- The UI overlays gameplay, so use position:fixed, pointer-events:none on the container, and the entire page background must be transparent
+
+### Visual Style
+- Dark semi-transparent panels (rgba(0,0,0,0.6) with backdrop-filter:blur(4px))
+- Rounded corners (8px), subtle border (1px solid rgba(255,255,255,0.1))
+- Font: 'Segoe UI', system-ui, sans-serif. White text with text-shadow for readability.
+- Neon accent colors:
+  - Cyan (#00f0ff) for the timer bar
+  - Purple (#b44dff) for active effects
+  - Orange (#ff8c00) for voting UI
+- Minimal footprint - should not block center of screen
+- All animations use CSS transitions/keyframes, smooth 60fps
+
+### Components
+
+#### 1. Chaos Timer Bar
+- Position: top-center, horizontally centered, 60% viewport width, 8px tall
+- A horizontal bar that shrinks from right-to-left as time progresses
+- Background track: rgba(0,0,0,0.5) with rounded ends
+- Fill: linear-gradient cyan (#00f0ff to #00b8cc), with a subtle glow (box-shadow)
+- When progress < 0.2, the bar pulses/flashes to indicate urgency
+- Message: {type:'timer', progress:0.0-1.0} where 1.0 = full bar, 0.0 = empty
+
+#### 2. Active Effects List
+- Position: top-right corner, stacked vertically
+- Shows up to 3 active effects
+- Each effect is a small card showing: effect name (bold) + remaining seconds (smaller, right-aligned)
+- Purple left-border accent (3px solid #b44dff)
+- Cards animate in (slide from right) when added, fade out when removed
+- Message: {type:'effects', list:[{name:'Effect Name', remaining:15.0}, ...]}
+- Update the list each tick; items not in the new list should animate out
+
+#### 3. Voting UI
+- Position: bottom-right area
+- Only visible when vote data is received, hides when timeLeft reaches 0
+- Shows header "VOTE" with remaining time
+- 3 options listed vertically, each showing: key number (1/2/3 in a circle), effect name, vote count bar
+- Vote count bars are horizontal, proportional to total votes, orange fill
+- Orange accent color scheme
+- Message: {type:'vote', options:[{name:'Effect',votes:5},{name:'Effect2',votes:3},{name:'Effect3',votes:1}], timeLeft:10}
+- When timeLeft is 0 or missing, hide the voting panel with a fade-out
+
+#### 4. Hit Notifications
+- Position: center of screen
+- Brief flash text that appears large, scales up slightly, then fades out over ~1.5s
+- White text with colored glow matching the text mood
+- Use CSS keyframes for the pop-in + fade-out animation
+- Message: {type:'hit', variant:'REVERSED!'} - variant is the text string to display
+- Multiple hits can stack (offset vertically if one is still fading)
+
+#### 5. Cougar Counter
+- Position: top-left corner
+- Shows a cougar paw icon (use unicode 🐾 or SVG) + count number
+- Only visible when count > 0
+- Subtle pulse animation when count changes
+- Message: {type:'cougars', count:3}
+
+#### 6. Phase Indicator
+- Full-screen overlay text for game state changes
+- LOBBY: dimmed overlay with "WAITING FOR PLAYERS..." centered, pulsing opacity
+- RUNNING: briefly flash "GO!" then hide (or just hide immediately - the timer handles running state)
+- WON: green-tinted overlay, large "VICTORY" text with celebration animation
+- LOST: red-tinted overlay, large "WASTED" text with shake animation
+- Message: {type:'phase', phase:'RUNNING'|'WON'|'LOST'|'LOBBY'}
+- Phase overlays for WON/LOST persist until next phase change. RUNNING hides all overlays.
+
+### app.js Details
+- Use a clean event-driven architecture
+- Keep a reference to DOM elements, update them efficiently (no innerHTML spam)
+- For the effects list, diff against previous state to animate additions/removals
+- For hit notifications, create a new element each time, auto-remove after animation completes
+- For voting bars, calculate percentage based on total votes and set width accordingly
+- Handle edge cases: empty arrays, zero values, rapid updates
+- Use requestAnimationFrame for any JS-driven animations if needed
+- The script should be self-contained, no external dependencies
+
+### index.html Details
+- Minimal HTML structure with semantic containers for each component
+- Include a <style> reset: *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+- Link to style.css, defer app.js
+- Set <body> to transparent background, overflow:hidden, full viewport
+
+### style.css Details
+- All animations defined as @keyframes
+- Use CSS custom properties (variables) for the accent colors at :root level
+- Responsive considerations: use vw/vh units where appropriate
+- Include a utility class .hidden { display:none; } and transition classes
+- Z-index layering: phase overlay on top (9999), hit notifications (9998), other HUD (100)
+
+Generate complete, production-ready code. No placeholders, no TODOs, no comments saying "add more here". Every feature must be fully implemented and working.

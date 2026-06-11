@@ -1,0 +1,1200 @@
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsHandsUp(alive)
+    for _, ped in ipairs(GetGamePool('CPed')) do
+        local pedType = GetPedType(ped)
+        if pedType ~= 6 and pedType ~= 27 and not IsPedDeadOrDying(ped, true) and OwnershipGuard.IsOwner(ped) then
+            TaskHandsUp(ped, 5000, 0, -1, true)
+            SetPedDropsWeapon(ped)
+        end
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsHeadless(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                SetPedComponentVariation(ped, 0, 0, 0, 0)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsHotcougars(alive)
+    local cougarEnemies = {}
+    local spawnTimer = -1
+    local maxCougarsToSpawn = 5
+    local lastTick = GetGameTimer()
+    RequestNamedPtfxAsset("des_trailerpark")
+    while not HasNamedPtfxAssetLoaded("des_trailerpark") do
+        Citizen.Wait(0)
+    end
+    while alive() do
+        local playerPed = PlayerPedId()
+        local playerPos = GetEntityCoords(playerPed, false)
+        local current_time = GetGameTimer()
+        if lastTick < current_time - 100 then
+            lastTick = current_time
+            for i = #cougarEnemies, 1, -1 do
+                local cougar = cougarEnemies[i]
+                local cougarPos = GetEntityCoords(cougar, false)
+                if IsPedDeadOrDying(cougar, false) or IsPedInjured(cougar)
+                or GetDistanceBetweenCoords(playerPos.x, playerPos.y, playerPos.z, cougarPos.x, cougarPos.y, cougarPos.z, false) > 100.0 then
+                    SetEntityHealth(cougar, 0, 0)
+                    UseParticleFxAsset("core")
+                    StartParticleFxNonLoopedAtCoord("exp_air_molotov", cougarPos.x, cougarPos.y, cougarPos.z, 0, 0, 0, 3, false, false, false)
+                    SetEntityAlpha(cougar, 0, true)
+                    SetPedAsNoLongerNeeded(cougar)
+                    DeletePed(cougar)
+                    table.remove(cougarEnemies, i)
+                else
+                    local targetPed = GetNearestPlayerPed(cougarPos)
+                    if targetPed then
+                        if IsPedInAnyVehicle(targetPed, true) then
+                            TaskEnterVehicle(cougar, GetVehiclePedIsIn(targetPed, false), -1, -2, 2.0, 1, 0)
+                        else
+                            TaskCombatPed(cougar, targetPed, 0, 16)
+                            SetBlockingOfNonTemporaryEvents(cougar, true)
+                        end
+                    end
+                end
+            end
+        end
+        if #cougarEnemies < maxCougarsToSpawn and current_time > spawnTimer + 2000 then
+            spawnTimer = current_time
+            local spawnPos = GetCoordAround(playerPed, math.random() * 360.0, 10.0, 0.0, true)
+            UseParticleFxAsset("core")
+            StartParticleFxNonLoopedAtCoord("exp_air_molotov", spawnPos.x, spawnPos.y, spawnPos.z, 0, 0, 0, 2, true, true, true)
+            Citizen.Wait(300)
+            local ped = CreateHostilePed(GetHashKey("a_c_mtlion"), 0, spawnPos)
+            SetPedCombatAttributes(ped, 1, true)
+            SetPedCombatAttributes(ped, 3, true)
+            SetBlockingOfNonTemporaryEvents(ped, true)
+            SetPedFleeAttributes(ped, 2, true)
+            UseParticleFxAsset("des_trailerpark")
+            StartParticleFxLoopedOnEntity("ent_ray_trailerpark_fires", ped, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, false, false, false)
+            RetargetSpawnedPed(ped, 5000)
+            table.insert(cougarEnemies, ped)
+        end
+        Citizen.Wait(0)
+    end
+    RemoveNamedPtfxAsset("des_trailerpark")
+    for _, ped in ipairs(cougarEnemies) do
+        SetPedAsNoLongerNeeded(ped)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsIgnite(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) and math.random() < 0.02 then
+                StartEntityFire(ped)
+            end
+        end)
+        Citizen.Wait(100)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsDance(alive)
+    local animDict = "missfbi3_sniping"
+    local animName = "dance_m_default"
+    local playerPed = PlayerPedId()
+    RequestAnimDict(animDict)
+    while not HasAnimDictLoaded(animDict) do Citizen.Wait(0) end
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            local rel = GetRelationshipBetweenPeds(playerPed, ped)
+            if not IsEntityPlayingAnim(ped, animDict, animName, 3) and not IsPedAPlayer(ped)
+                and (not IsEntityAMissionEntity(ped) or rel == 4 or rel == 5) then
+                TaskPlayAnim(ped, animDict, animName, 4.0, -4.0, -1, 1, 0.0, false, false, false)
+                SetPedKeepTask(ped, true)
+                SetBlockingOfNonTemporaryEvents(ped, true)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+    RemoveAnimDict(animDict)
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if IsEntityPlayingAnim(ped, animDict, animName, 3) then
+            SetPedKeepTask(ped, false)
+            SetBlockingOfNonTemporaryEvents(ped, false)
+        end
+    end)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsIntorandomvehs(alive)
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if not IsPedAPlayer(ped) and not IsPedInAnyVehicle(ped, false) then
+            local nearbyVehs = {}
+            OwnershipGuard.ForEachOwnedVehicle(function(veh)
+                if IsVehicleSeatFree(veh, -1, false) then
+                    table.insert(nearbyVehs, veh)
+                end
+            end)
+            if #nearbyVehs > 0 then
+                local veh = nearbyVehs[math.random(#nearbyVehs)]
+                SetPedIntoVehicle(ped, veh, -1)
+            end
+        end
+    end)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsInvincible(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                SetEntityInvincible(ped, true)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        SetEntityInvincible(ped, false)
+    end)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsGhost(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                SetEntityAlpha(ped, 80, false)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        ResetEntityAlpha(ped)
+    end)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsJamesbond(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local bondModel = GetHashKey("cs_milton")
+    local vehModel = GetHashKey("JB700")
+    local playerGroup = GetHashKey("PLAYER")
+    local relationshipGroup = AddRelationshipGroup("_HOSTILE_BOND")
+    SetRelationshipBetweenGroups(5, relationshipGroup, playerGroup)
+    local heading = GetEntityHeading(IsPedInAnyVehicle(playerPed, false) and GetVehiclePedIsIn(playerPed, false) or playerPed)
+    local xPos = math.sin(math.rad(360.0 - heading)) * 10.0
+    local yPos = math.cos(math.rad(360.0 - heading)) * 10.0
+    RequestModel(vehModel)
+    while not HasModelLoaded(vehModel) do Citizen.Wait(0) end
+    local veh = CreateVehicle(vehModel, playerPos.x - xPos, playerPos.y - yPos, playerPos.z, heading, true, false, false)
+    SetVehicleEngineOn(veh, true, true, false)
+    SetModelAsNoLongerNeeded(vehModel)
+    local vel = GetEntityVelocity(playerPed)
+    SetEntityVelocity(veh, vel.x, vel.y, vel.z)
+    RequestModel(bondModel)
+    while not HasModelLoaded(bondModel) do Citizen.Wait(0) end
+    local bond = CreatePedInsideVehicle(veh, 4, bondModel, -1, true, false)
+    SetModelAsNoLongerNeeded(bondModel)
+    SetPedRelationshipGroupHash(bond, relationshipGroup)
+    TaskSetBlockingOfNonTemporaryEvents(bond, true)
+    SetPedHearingRange(bond, 9999.0)
+    SetPedConfigFlag(bond, 281, true)
+    SetPedCombatAttributes(bond, 5, true)
+    SetPedCombatAttributes(bond, 46, true)
+    SetPedSuffersCriticalHits(bond, false)
+    GiveWeaponToPed(bond, GetHashKey("WEAPON_SWITCHBLADE"), 9999, true, true)
+    GiveWeaponToPed(bond, GetHashKey("WEAPON_VINTAGEPISTOL"), 9999, true, true)
+    GiveWeaponComponentToPed(bond, GetHashKey("WEAPON_VINTAGEPISTOL"), GetHashKey("COMPONENT_AT_PI_SUPP"))
+    SetPedAccuracy(bond, 100)
+    local targetPed = GetNearestPlayerPed(GetEntityCoords(bond))
+    TaskCombatPed(bond, targetPed, 0, 16)
+    RetargetSpawnedPed(bond, 5000)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsSlidy(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                SetPedMoveRateOverride(ped, 100.0)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsKillerclowns(alive)
+    local function getRandomOffsetCoord(startCoord, minOffset, maxOffset)
+        local coord = {x = startCoord.x, y = startCoord.y, z = startCoord.z}
+        for i = 0, 9 do
+            coord.x = startCoord.x + (math.random(0, 1) == 0 and math.random(minOffset, maxOffset) or -math.random(minOffset, maxOffset))
+            coord.y = startCoord.y + (math.random(0, 1) == 0 and math.random(minOffset, maxOffset) or -math.random(minOffset, maxOffset))
+            coord.z = startCoord.z
+            local ok, gz = GetGroundZFor3dCoord(coord.x, coord.y, coord.z, 0.0, false, false)
+            if ok then coord.z = gz; break end
+        end
+        return coord
+    end
+    local clownEnemies = {}
+    local spawnTimer = -1
+    local relationshipGroup
+    local maxClownsToSpawn = 3
+    local playerGroup = GetHashKey("PLAYER")
+    relationshipGroup = AddRelationshipGroup("_HOSTILE_KILLER_CLOWNS")
+    SetRelationshipBetweenGroups(5, relationshipGroup, playerGroup)
+    SetRelationshipBetweenGroups(5, playerGroup, relationshipGroup)
+    SetRelationshipBetweenGroups(0, relationshipGroup, relationshipGroup)
+    RequestNamedPtfxAsset("scr_rcbarry2")
+    while not HasNamedPtfxAssetLoaded("scr_rcbarry2") do
+        Citizen.Wait(0)
+    end
+    while alive() do
+        local playerPed = PlayerPedId()
+        local playerPos = GetEntityCoords(playerPed, false)
+        local current_time = GetGameTimer()
+        for i = #clownEnemies, 1, -1 do
+            local clown = clownEnemies[i]
+            local clownPos = GetEntityCoords(clown, false)
+            if IsPedDeadOrDying(clown, false) or IsPedInjured(clown)
+            or GetDistanceBetweenCoords(playerPos.x, playerPos.y, playerPos.z, clownPos.x, clownPos.y, clownPos.z, false) > 100.0 then
+                SetEntityHealth(clown, 0, 0)
+                UseParticleFxAsset("scr_rcbarry2")
+                StartParticleFxNonLoopedAtCoord("scr_clown_death", clownPos.x, clownPos.y, clownPos.z, 0, 0, 0, 3, false, false, false)
+                Citizen.Wait(300)
+                SetEntityAlpha(clown, 0, true)
+                SetPedAsNoLongerNeeded(clown)
+                DeletePed(clown)
+                table.remove(clownEnemies, i)
+                Citizen.Wait(0)
+            else
+                local targetPed = GetNearestPlayerPed(clownPos)
+                if targetPed then
+                    TaskCombatPed(clown, targetPed, 0, 16)
+                end
+            end
+        end
+        if #clownEnemies < maxClownsToSpawn and current_time > spawnTimer + 2000 then
+            spawnTimer = current_time
+            local spawnPos = getRandomOffsetCoord(playerPos, 10, 25)
+            UseParticleFxAsset("scr_rcbarry2")
+            StartParticleFxNonLoopedAtCoord("scr_clown_appears", spawnPos.x, spawnPos.y, spawnPos.z, 0, 0, 0, 2, true, true, true)
+            Citizen.Wait(300)
+            local clownHash = GetHashKey("s_m_y_clown_01")
+            local weaponHash = GetHashKey("WEAPON_MICROSMG")
+            LoadModel(clownHash)
+            local ped = CreatePed(-1, clownHash, spawnPos.x, spawnPos.y, spawnPos.z, 0, true, false)
+            SetBlockingOfNonTemporaryEvents(ped, true)
+            SetPedRelationshipGroupHash(ped, relationshipGroup)
+            SetPedHearingRange(ped, 9999.0)
+            GiveWeaponToPed(ped, weaponHash, 9999, true, true)
+            SetPedAccuracy(ped, 20)
+            local targetPed = GetNearestPlayerPed(spawnPos)
+            TaskCombatPed(ped, targetPed, 0, 16)
+            RetargetSpawnedPed(ped, 5000)
+            table.insert(clownEnemies, ped)
+        end
+        Citizen.Wait(0)
+    end
+    RemoveNamedPtfxAsset("scr_rcbarry2")
+    for _, ped in ipairs(clownEnemies) do
+        SetPedAsNoLongerNeeded(ped)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsLaunchnearby(alive)
+    local spacePeds = {}
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if not IsPedAPlayer(ped) then
+            local vel = GetEntityVelocity(ped)
+            ClearPedTasksImmediately(ped)
+            SetPedToRagdoll(ped, 10000, 10000, 0, true, true, false)
+            spacePeds[#spacePeds + 1] = { ped = ped, vel = vel }
+        end
+    end)
+    Citizen.Wait(0)
+    for _, entry in ipairs(spacePeds) do
+        SetEntityVelocity(entry.ped, entry.vel.x, entry.vel.y, 100.0)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsLoosetrigger(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) and GetSelectedPedWeapon(ped) ~= GetHashKey("WEAPON_UNARMED") then
+                local pedPos = GetEntityCoords(ped)
+                SetPedShootsAtCoord(ped, pedPos.x + math.random(-10, 10),
+                    pedPos.y + math.random(-10, 10),
+                    pedPos.z + math.random(-5, 5), true)
+            end
+        end)
+        Citizen.Wait(500)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsMercenaries(alive)
+    while alive() do
+        local mercHash = GetHashKey("s_m_m_marine_01")
+        local pedsToReplace = {}
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) and IsPedHuman(ped) then
+                pedsToReplace[#pedsToReplace + 1] = {
+                    ped = ped,
+                    coords = GetEntityCoords(ped, false),
+                    heading = GetEntityHeading(ped)
+                }
+            end
+        end)
+        for _, entry in ipairs(pedsToReplace) do
+            DeletePed(entry.ped)
+        end
+        Citizen.Wait(0)
+        RequestModel(mercHash)
+        while not HasModelLoaded(mercHash) do Citizen.Wait(0) end
+        for _, entry in ipairs(pedsToReplace) do
+            local merc = CreatePed(26, mercHash, entry.coords.x, entry.coords.y, entry.coords.z, entry.heading, true, false)
+            GiveWeaponToPed(merc, GetHashKey("WEAPON_CARBINERIFLE"), 9999, true, true)
+            local targetPed = GetNearestPlayerPed(entry.coords)
+            TaskCombatPed(merc, targetPed, 0, 16)
+            RetargetSpawnedPed(merc, 5000)
+        end
+        SetModelAsNoLongerNeeded(mercHash)
+        Citizen.Wait(10000)
+    end
+end
+
+-- sync_mode: LOCAL
+function FX_PedsMindmg(alive)
+    while alive() do
+        SetAiMeleeWeaponDamageModifier(0.1)
+        SetAiWeaponDamageModifier(0.1)
+        SetPlayerMeleeWeaponDamageModifier(PlayerId(), 0.1, true)
+        SetPlayerWeaponDamageModifier(PlayerId(), 0.1)
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                SetPedSuffersCriticalHits(ped, false)
+                SetPedConfigFlag(ped, 281, true)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+    ResetAiMeleeWeaponDamageModifier()
+    ResetAiWeaponDamageModifier()
+    SetPlayerMeleeWeaponDamageModifier(PlayerId(), 1.0, true)
+    SetPlayerWeaponDamageModifier(PlayerId(), 1.0)
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if not IsPedAPlayer(ped) then
+            SetPedSuffersCriticalHits(ped, true)
+            SetPedConfigFlag(ped, 281, false)
+        end
+    end)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsMinions(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                SetPedConfigFlag(ped, 223, true)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if DoesEntityExist(ped) then
+            SetPedConfigFlag(ped, 223, false)
+        end
+    end)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsMowermates(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local mowerHash = GetHashKey("MOWER")
+    RequestModel(mowerHash)
+    while not HasModelLoaded(mowerHash) do Citizen.Wait(0) end
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if not IsPedAPlayer(ped) and not IsPedDeadOrDying(ped, true) then
+            local pedPos = GetEntityCoords(ped, false)
+            local heading = GetEntityHeading(ped)
+            local veh = CreateVehicle(mowerHash, pedPos.x, pedPos.y, pedPos.z, heading, true, false, false)
+            SetVehicleEngineOn(veh, true, true, false)
+            SetPedIntoVehicle(ped, veh, -1)
+        end
+    end)
+    SetModelAsNoLongerNeeded(mowerHash)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsNailguns(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if IsPedShooting(ped) and not IsPedAPlayer(ped) then
+                local pos = GetEntityCoords(ped, false)
+                local fwd = GetEntityForwardVector(ped)
+                local targPos = vector3(pos.x + fwd.x * 500.0, pos.y + fwd.y * 500.0, pos.z + fwd.z * 500.0)
+                local ray = StartShapeTestRay(pos.x, pos.y, pos.z, targPos.x, targPos.y, targPos.z, 12, ped, 7)
+                local _, hit, hitCoords, _, entityHit = GetShapeTestResult(ray)
+                if hit and DoesEntityExist(entityHit) then
+                    SetEntityCoords(ped, hitCoords.x, hitCoords.y, hitCoords.z, false, false, false, true)
+                end
+            end
+        end)
+        Citizen.Wait(0)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsFlee(alive)
+    local playerPed = PlayerPedId()
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if not IsPedAPlayer(ped) then
+            local targetPed = GetNearestPlayerPed(GetEntityCoords(ped))
+            if targetPed then
+                TaskReactAndFleePed(ped, targetPed)
+            end
+            SetPedFleeAttributes(ped, 2, true)
+        end
+    end)
+end
+
+-- sync_mode: LOCAL
+function FX_PlayerNoragdoll(alive)
+    while alive() do
+        SetPedCanRagdoll(PlayerPedId(), false)
+        Citizen.Wait(0)
+    end
+    SetPedCanRagdoll(PlayerPedId(), true)
+end
+
+-- sync_mode: VISUAL
+function FX_PedsNotMenendez(alive)
+    local deadPeds = {}
+    local lastTick = GetGameTimer()
+    local speechHash = GetHashKey("BUDDY_DOWN")
+    local voiceName = "s_m_y_blackops_01_white_mini_01"
+    while alive() do
+        local curTick = GetGameTimer()
+        local newDead = false
+        for _, ped in ipairs(GetGamePool('CPed')) do
+            if not deadPeds[ped] and IsEntityDead(ped, false) then
+                deadPeds[ped] = true
+                newDead = true
+            end
+        end
+        if newDead and curTick - lastTick >= 2000 then
+            lastTick = curTick
+            local playerPos = GetEntityCoords(PlayerPedId(), false)
+            PlayAmbientSpeechAtCoords(speechHash, voiceName, playerPos.x, playerPos.y, playerPos.z, "SPEECH_PARAMS_FORCE_SHOUTED")
+        end
+        Citizen.Wait(0)
+    end
+end
+
+-- sync_mode: VISUAL
+function FX_PedsObliterate(alive)
+    RequestNamedPtfxAsset("scr_xm_orbital")
+    RequestNamedPtfxAsset("scr_xm_orbital_blast")
+    while not HasNamedPtfxAssetLoaded("scr_xm_orbital") or not HasNamedPtfxAssetLoaded("scr_xm_orbital_blast") do
+        Citizen.Wait(0)
+    end
+    local count = 5
+    for _, ped in ipairs(GetGamePool('CPed')) do
+        if not IsPedAPlayer(ped) and OwnershipGuard.IsOwner(ped) then
+            local pos = GetEntityCoords(ped, false)
+            UseParticleFxAsset("scr_xm_orbital")
+            StartNetworkedParticleFxNonLoopedAtCoord("scr_xm_orbital_blast", pos.x, pos.y, pos.z, 0.0, 0.0, 0.0, 1.0, false, false, false, false)
+            PlaySoundFromCoord(-1, "DLC_XM_Explosions_Orbital_Cannon", pos.x, pos.y, pos.z, 0, true, 0, false)
+            AddExplosion(pos.x, pos.y, pos.z, 9, 100.0, true, false, 3.0, false)
+            SetEntityHealth(ped, 0, false)
+            count = count - 1
+            if count == 0 then
+                count = 5
+                Citizen.Wait(0)
+            end
+        end
+    end
+    RemoveNamedPtfxAsset("scr_xm_orbital")
+    RemoveNamedPtfxAsset("scr_xm_orbital_blast")
+end
+
+-- sync_mode: LOCAL
+function FX_PlayerOhko(alive)
+    while alive() do
+        SetPlayerMeleeWeaponDamageModifier(PlayerId(), 100.0)
+        SetPlayerWeaponDamageModifier(PlayerId(), 100.0)
+        Citizen.Wait(0)
+    end
+    SetPlayerMeleeWeaponDefenseModifier(PlayerId(), 1.0)
+    SetPlayerWeaponDefenseModifier(PlayerId(), 1.0)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsPhones(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) and math.random() < 0.03 then
+                TaskUseMobilePhone(ped, true)
+            end
+        end)
+        Citizen.Wait(500)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsPropHunt(alive)
+    while alive() do
+        local pedsToConvert = {}
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) and math.random() < 0.01 then
+                pedsToConvert[#pedsToConvert + 1] = ped
+            end
+        end)
+        for _, ped in ipairs(pedsToConvert) do
+            local props = {}
+            OwnershipGuard.ForEachOwnedObject(function(obj)
+                table.insert(props, obj)
+            end)
+            if #props > 0 then
+                local prop = props[math.random(#props)]
+                local model = GetEntityModel(prop)
+                local coords = GetEntityCoords(ped, false)
+                local heading = GetEntityHeading(ped)
+                DeletePed(ped)
+                Citizen.Wait(0)
+                RequestModel(model)
+                while not HasModelLoaded(model) do Citizen.Wait(0) end
+                local obj = CreateObject(model, coords.x, coords.y, coords.z, true, true, false)
+                SetModelAsNoLongerNeeded(model)
+                SetEntityHeading(obj, heading)
+            end
+        end
+        Citizen.Wait(5000)
+    end
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsSpawnQuarrelingCouple(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local heading = GetEntityHeading(playerPed)
+    local relationshipGroup = AddRelationshipGroup("_HOSTILE_DEBRA")
+    SetRelationshipBetweenGroups(5, relationshipGroup, GetHashKey("PLAYER"))
+    local debraHash = GetHashKey("cs_debra")
+    local floydHash = GetHashKey("cs_floyd")
+    RequestModel(debraHash)
+    while not HasModelLoaded(debraHash) do Citizen.Wait(0) end
+    local debra = CreatePed(4, debraHash, playerPos.x + 1.0, playerPos.y, playerPos.z, heading, true, false)
+    SetPedRelationshipGroupHash(debra, relationshipGroup)
+    GiveWeaponToPed(debra, GetHashKey("WEAPON_PISTOL"), 9999, true, true)
+    local targetDebra = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(debra, targetDebra, 0, 16)
+    RetargetSpawnedPed(debra, 5000)
+    SetModelAsNoLongerNeeded(debraHash)
+    RequestModel(floydHash)
+    while not HasModelLoaded(floydHash) do Citizen.Wait(0) end
+    local floyd = CreatePed(4, floydHash, playerPos.x - 1.0, playerPos.y, playerPos.z, heading, true, false)
+    SetPedRelationshipGroupHash(floyd, relationshipGroup)
+    GiveWeaponToPed(floyd, GetHashKey("WEAPON_KNIFE"), 9999, true, true)
+    local targetFloyd = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(floyd, targetFloyd, 0, 16)
+    RetargetSpawnedPed(floyd, 5000)
+    SetModelAsNoLongerNeeded(floydHash)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsRagdoll(alive)
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        ClearPedTasksImmediately(ped)
+        SetPedToRagdoll(ped, 10000, 10000, 0, true, true, false)
+    end)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsSensitivetouch(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) and HasEntityBeenDamagedByAnyPed(ped) then
+                SetEntityHealth(ped, 0)
+                ClearEntityLastDamageEntity(ped)
+            end
+        end)
+        Citizen.Wait(100)
+    end
+end
+
+-- sync_mode: LOCAL
+function FX_PedsReflectivedamage(alive)
+    while alive() do
+        local playerPed = PlayerPedId()
+        if HasEntityBeenDamagedByAnyPed(playerPed) then
+            local attacker = GetPedSourceOfDeath(playerPed)
+            if DoesEntityExist(attacker) and attacker ~= 0 then
+                local dmg = GetEntityHealth(playerPed)
+                SetEntityHealth(attacker, GetEntityHealth(attacker) - (GetEntityMaxHealth(playerPed) - dmg))
+            end
+            ClearEntityLastDamageEntity(playerPed)
+        end
+        Citizen.Wait(100)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsRevive(alive)
+    local pedsToRevive = {}
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if IsEntityDead(ped, false) and not IsPedAPlayer(ped) then
+            pedsToRevive[#pedsToRevive + 1] = {
+                coords = GetEntityCoords(ped, false),
+                heading = GetEntityHeading(ped),
+                model = GetEntityModel(ped)
+            }
+            DeletePed(ped)
+        end
+    end)
+    for _, entry in ipairs(pedsToRevive) do
+        RequestModel(entry.model)
+        while not HasModelLoaded(entry.model) do Citizen.Wait(0) end
+        local newPed = CreatePed(26, entry.model, entry.coords.x, entry.coords.y, entry.coords.z, entry.heading, true, false)
+        SetModelAsNoLongerNeeded(entry.model)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsRiot(alive)
+    local groupHash
+    groupHash = AddRelationshipGroup("_RIOT")
+    local goneThroughPeds = {}
+    while alive() do
+        local riotGroupHash = GetHashKey("_RIOT")
+        local playerGroupHash = GetHashKey("PLAYER")
+        SetRelationshipBetweenGroups(5, riotGroupHash, riotGroupHash)
+        SetRelationshipBetweenGroups(5, riotGroupHash, playerGroupHash)
+        SetRelationshipBetweenGroups(5, playerGroupHash, riotGroupHash)
+        SetPlayerWantedLevel(PlayerId(), 0, false)
+        SetMaxWantedLevel(0)
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                SetPedRelationshipGroupHash(ped, riotGroupHash)
+                SetPedCombatAttributes(ped, 5, true)
+                SetPedCombatAttributes(ped, 46, true)
+                SetPedFiringPattern(ped, 0xC6EE6B4C)
+                local found = false
+                for _, v in ipairs(goneThroughPeds) do
+                    if v == ped then found = true; break end
+                end
+                if not found then
+                    table.insert(goneThroughPeds, ped)
+                end
+            end
+        end)
+        for i = #goneThroughPeds, 1, -1 do
+            if not DoesEntityExist(goneThroughPeds[i]) then
+                table.remove(goneThroughPeds, i)
+            end
+        end
+        Citizen.Wait(0)
+    end
+    SetMaxWantedLevel(5)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsScooterbrothers(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local faggioHash = GetHashKey("FAGGIO")
+    RequestModel(faggioHash)
+    while not HasModelLoaded(faggioHash) do Citizen.Wait(0) end
+    OwnershipGuard.ForEachOwnedPed(function(ped)
+        if not IsPedAPlayer(ped) and not IsPedDeadOrDying(ped, true) then
+            local pedPos = GetEntityCoords(ped, false)
+            local heading = GetEntityHeading(ped)
+            local veh = CreateVehicle(faggioHash, pedPos.x, pedPos.y, pedPos.z, heading, true, false, false)
+            SetVehicleEngineOn(veh, true, true, false)
+            SetPedIntoVehicle(ped, veh, -1)
+        end
+    end)
+    SetModelAsNoLongerNeeded(faggioHash)
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsSlipperyPeds(alive)
+    while alive() do
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                SetPedMoveRateOverride(ped, 100.0)
+                local vel = GetEntityVelocity(ped)
+                SetEntityVelocity(ped, vel.x * 1.01, vel.y * 1.01, vel.z)
+            end
+        end)
+        Citizen.Wait(0)
+    end
+end
+
+-- sync_mode: GLOBAL_OWNED
+function FX_PedsSmoketrails(alive)
+    while alive() do
+        UseParticleFxAsset("core")
+        OwnershipGuard.ForEachOwnedPed(function(ped)
+            if not IsPedAPlayer(ped) then
+                StartParticleFxLoopedOnEntity("ent_amb_cig_smoke", ped, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, false, false, false)
+            end
+        end)
+        Citizen.Wait(500)
+    end
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsAngryalien(alive)
+    local modelHash = GetHashKey("s_m_m_movalien_01")
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local group = AddRelationshipGroup("_HOSTILE_ALIEN")
+    SetRelationshipBetweenGroups(5, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVMALE"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVFEMALE"))
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    local ped = CreatePed(4, modelHash, playerPos.x, playerPos.y, playerPos.z, 0.0, true, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    SetPedRelationshipGroupHash(ped, group)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetPedComponentVariation(ped, 0, 0, 0, 0)
+    SetPedComponentVariation(ped, 3, 0, 0, 0)
+    SetPedComponentVariation(ped, 4, 0, 0, 0)
+    SetPedComponentVariation(ped, 5, 0, 0, 0)
+    SetPedComponentVariation(ped, 6, 0, 0, 0)
+    SetEntityHealth(ped, 500)
+    SetPedArmour(ped, 500)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedCombatAttributes(ped, 0, true)
+    SetPedCanRagdollFromPlayerImpact(ped, false)
+    SetRagdollBlockingFlags(ped, 5)
+    SetPedSuffersCriticalHits(ped, false)
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_RAYPISTOL"), 9999, true, true)
+    local targetPed = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(ped, targetPed, 0, 16)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+    RetargetSpawnedPed(ped, 5000)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_SpawnAngryChimp(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local chimpHash = 2825402133
+    local weaponHash = GetHashKey("WEAPON_STONE_HATCHET")
+    local relationshipGroup = AddRelationshipGroup("_HOSTILE_CHIMP")
+    SetRelationshipBetweenGroups(5, relationshipGroup, GetHashKey("PLAYER"))
+    RequestModel(chimpHash)
+    while not HasModelLoaded(chimpHash) do Citizen.Wait(0) end
+    local ped = CreatePed(4, chimpHash, playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed), true, false)
+    SetModelAsNoLongerNeeded(chimpHash)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    SetPedRelationshipGroupHash(ped, relationshipGroup)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedAccuracy(ped, 100)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+    SetPedSuffersCriticalHits(ped, false)
+    GiveWeaponToPed(ped, weaponHash, 9999, true, true)
+    local targetPed = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(ped, targetPed, 0, 16)
+    RetargetSpawnedPed(ped, 5000)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_SpawnGrieferjesus(alive)
+    local modelHash = -835930287
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local group = AddRelationshipGroup("_HOSTILE_JESUS")
+    SetRelationshipBetweenGroups(5, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVMALE"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVFEMALE"))
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    local ped = CreatePed(4, modelHash, playerPos.x, playerPos.y, playerPos.z, 0.0, true, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    SetPedRelationshipGroupHash(ped, group)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetEntityProofs(ped, false, true, true, false, false, false, false, false)
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedCanRagdollFromPlayerImpact(ped, false)
+    SetRagdollBlockingFlags(ped, 5)
+    SetPedSuffersCriticalHits(ped, false)
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_RAILGUN"), 9999, true, true)
+    local targetPed = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(ped, targetPed, 0, 16)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+    RetargetSpawnedPed(ped, 5000)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_SpawnGrieferjesus2(alive)
+    local modelHash = -835930287
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local oppressorHash = GetHashKey("OPPRESSOR2")
+    local group = AddRelationshipGroup("_HOSTILE_JESUS2")
+    SetRelationshipBetweenGroups(5, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVMALE"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVFEMALE"))
+    RequestModel(oppressorHash)
+    while not HasModelLoaded(oppressorHash) do Citizen.Wait(0) end
+    local heading = GetEntityHeading(IsPedInAnyVehicle(playerPed, false) and GetVehiclePedIsIn(playerPed, false) or playerPed)
+    local veh = CreateVehicle(oppressorHash, playerPos.x, playerPos.y, playerPos.z, heading, true, false, false)
+    SetVehicleEngineOn(veh, true, true, false)
+    SetVehicleModKit(veh, 0)
+    for i = 0, 49 do
+        local max = GetNumVehicleMods(veh, i)
+        SetVehicleMod(veh, i, max > 0 and max - 1 or 0, false)
+    end
+    SetEntityProofs(veh, false, true, true, false, false, false, false, false)
+    SetModelAsNoLongerNeeded(oppressorHash)
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    local ped = CreatePedInsideVehicle(veh, 4, modelHash, -1, true, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    SetPedRelationshipGroupHash(ped, group)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetPedCombatAttributes(ped, 3, false)
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetEntityProofs(ped, false, true, true, false, false, false, false, false)
+    SetPedCanBeKnockedOffVehicle(ped, 1)
+    SetPedCanRagdollFromPlayerImpact(ped, false)
+    SetRagdollBlockingFlags(ped, 5)
+    SetPedSuffersCriticalHits(ped, false)
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_RAILGUN"), 9999, true, true)
+    local targetPed = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(ped, targetPed, 0, 16)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+    RetargetSpawnedPed(ped, 5000)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsAngryjimmy(alive)
+    local modelHash = 1459905209
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local group = AddRelationshipGroup("_HOSTILE_JIMMY")
+    SetRelationshipBetweenGroups(5, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVMALE"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVFEMALE"))
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    local ped = CreatePed(4, modelHash, playerPos.x, playerPos.y, playerPos.z, 0.0, true, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    SetPedRelationshipGroupHash(ped, group)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetEntityProofs(ped, false, true, true, false, false, false, false, false)
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedCanRagdollFromPlayerImpact(ped, false)
+    SetRagdollBlockingFlags(ped, 5)
+    SetPedSuffersCriticalHits(ped, false)
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_COMBATMG"), 9999, true, true)
+    local targetPed = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(ped, targetPed, 0, 16)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+    RetargetSpawnedPed(ped, 5000)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsSpawnballasquad(alive)
+    local ballaNames = {-198252413, 588969535, 361513884, -1492432238, -1410400252, 599294057}
+    local group = AddRelationshipGroup("_ENEMY_BALLAS")
+    SetRelationshipBetweenGroups(5, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(5, GetHashKey("PLAYER"), group)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local heading = GetEntityHeading(
+        IsPedInAnyVehicle(playerPed, false) and GetVehiclePedIsIn(playerPed, false) or playerPed
+    )
+    local vehHash = GetHashKey("Virgo2")
+    RequestModel(vehHash)
+    while not HasModelLoaded(vehHash) do Citizen.Wait(0) end
+    local veh = CreateVehicle(vehHash, playerPos.x, playerPos.y, playerPos.z, heading, true, true)
+    SetModelAsNoLongerNeeded(vehHash)
+    SetVehicleColours(veh, 148, 148)
+    SetVehicleEngineOn(veh, true, true, false)
+    for i = 0, 1 do
+        local modelHash = ballaNames[math.random(#ballaNames)]
+        RequestModel(modelHash)
+        while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+        local ped = CreatePed(4, modelHash, playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed), true, false)
+        SetModelAsNoLongerNeeded(modelHash)
+        if i == 0 then
+            SetPedIntoVehicle(ped, veh, -1)
+        else
+            SetPedIntoVehicle(ped, veh, 0)
+        end
+        SetPedCombatAttributes(ped, 3, false)
+        SetBlockingOfNonTemporaryEvents(ped, true)
+        SetPedRelationshipGroupHash(ped, group)
+        SetPedHearingRange(ped, 9999.0)
+        GiveWeaponToPed(ped, GetHashKey("WEAPON_MICROSMG"), 9999, true, true)
+        SetPedAccuracy(ped, 50)
+        local targetPed = GetNearestPlayerPed(playerPos)
+        TaskCombatPed(ped, targetPed, 0, 16)
+        RetargetSpawnedPed(ped, 5000)
+    end
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsSpawnBiker(alive)
+    local vehHash = GetHashKey("DAEMON")
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local heading = GetEntityHeading(
+        IsPedInAnyVehicle(playerPed, false) and GetVehiclePedIsIn(playerPed, false) or playerPed
+    )
+    local xPos = math.sin((360 - heading) * math.pi / 180) * 10
+    local yPos = math.cos((360 - heading) * math.pi / 180) * 10
+    RequestModel(vehHash)
+    while not HasModelLoaded(vehHash) do Citizen.Wait(0) end
+    local veh = CreateVehicle(vehHash, playerPos.x - xPos, playerPos.y - yPos, playerPos.z, heading, true, true)
+    SetModelAsNoLongerNeeded(vehHash)
+    SetVehicleEngineOn(veh, true, true, false)
+    local vel = GetEntityVelocity(playerPed)
+    SetEntityVelocity(veh, vel.x, vel.y, vel.z)
+    local ped = _ChaosCreateHostilePed(GetHashKey("G_M_Y_Lost_03"), GetHashKey("weapon_dbshotgun"))
+    SetPedIntoVehicle(ped, veh, -1)
+    RetargetSpawnedPed(ped, 5000)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_SpawnCompbrad(alive)
+    local modelHash = GetHashKey("ig_brad")
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    local ped = CreatePed(4, modelHash, playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed), true, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    SetPedSuffersCriticalHits(ped, false)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedAsGroupMember(ped, GetPlayerGroup(PlayerId()))
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_MICROSMG"), 9999, true, true)
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_RPG"), 9999, true, true)
+    SetPedAccuracy(ped, 100)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_SpawnChimp(alive)
+    local modelHash = GetHashKey("a_c_chimp")
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    local ped = CreatePed(28, modelHash, playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed), true, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    SetPedSuffersCriticalHits(ped, false)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedAsGroupMember(ped, GetPlayerGroup(PlayerId()))
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedAccuracy(ped, 100)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_PISTOL"), 9999, false, true)
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_CARBINERIFLE"), 9999, false, true)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_SpawnChop(alive)
+    local modelHash = GetHashKey("a_c_chop")
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    local ped = CreatePed(28, modelHash, playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed), true, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    SetPedCombatAttributes(ped, 0, false)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedRelationshipGroupHash(ped, GetHashKey("_COMPANION_CHOP"))
+    SetPedAsGroupMember(ped, GetPlayerGroup(PlayerId()))
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_SpawnComprnd(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local ped = _ChaosCreateRandomPed(playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed))
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    SetPedSuffersCriticalHits(ped, false)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedAsGroupMember(ped, GetPlayerGroup(PlayerId()))
+    GiveWeaponToPed(ped, GetSelectedPedWeapon(playerPed), 9999, true, true)
+    SetPedAccuracy(ped, 100)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsSpawndancingapes(alive)
+    local group = AddRelationshipGroup("_DANCING__APES")
+    SetRelationshipBetweenGroups(0, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(0, GetHashKey("PLAYER"), group)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local chimps = {GetHashKey("a_c_chimp"), GetHashKey("a_c_rhesus")}
+    RequestAnimDict("missfbi3_sniping")
+    for i = 0, 2 do
+        local modelHash = chimps[math.random(2)]
+        RequestModel(modelHash)
+        while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+        local ped = CreatePed(28, modelHash, playerPos.x, playerPos.y, playerPos.z, 0.0, true, false)
+        SetModelAsNoLongerNeeded(modelHash)
+        SetPedRelationshipGroupHash(ped, group)
+        if IsPedInAnyVehicle(playerPed, false) then
+            SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+        end
+        SetPedCanRagdoll(ped, false)
+        SetPedSuffersCriticalHits(ped, false)
+        TaskPlayAnim(ped, "missfbi3_sniping", "dance_m_default", 4.0, -4.0, -1, 1, 0.0, false, false, false)
+        SetPedConfigFlag(ped, 292, true)
+        Citizen.Wait(0)
+    end
+    RemoveAnimDict("missfbi3_sniping")
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsSpawnfancats(alive)
+    local modelHash = GetHashKey("a_c_cat_01")
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local relationshipGroup = AddRelationshipGroup("_FAN_CATS")
+    SetRelationshipBetweenGroups(0, relationshipGroup, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(0, GetHashKey("PLAYER"), relationshipGroup)
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    for i = 1, 3 do
+        local ped = CreatePed(28, modelHash, playerPos.x, playerPos.y, playerPos.z, 0.0, true, false)
+        SetPedRelationshipGroupHash(ped, relationshipGroup)
+        SetPedAsGroupMember(ped, GetPlayerGroup(PlayerId()))
+    end
+    SetModelAsNoLongerNeeded(modelHash)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsSpawnrandomhostile(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local group = AddRelationshipGroup("_HOSTILE_RANDOM")
+    SetRelationshipBetweenGroups(5, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVMALE"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVFEMALE"))
+    local ped = _ChaosCreateRandomPed(playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed))
+    SetPedRelationshipGroupHash(ped, group)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetPedCanRagdollFromPlayerImpact(ped, false)
+    SetRagdollBlockingFlags(ped, 5)
+    SetPedSuffersCriticalHits(ped, false)
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    GiveWeaponToPed(ped, GetSelectedPedWeapon(playerPed), 9999, true, true)
+    SetPedAccuracy(ped, 100)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+    local targetPed = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(ped, targetPed, 0, 16)
+    RetargetSpawnedPed(ped, 5000)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsSpawnimrage(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local group = AddRelationshipGroup("_IM_RAGE")
+    SetRelationshipBetweenGroups(5, group, GetHashKey("PLAYER"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVMALE"))
+    SetRelationshipBetweenGroups(5, group, GetHashKey("CIVFEMALE"))
+    local model = GetHashKey("u_m_y_imporage")
+    RequestModel(model)
+    while not HasModelLoaded(model) do Citizen.Wait(0) end
+    local ped = CreatePed(4, model, playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed), true, false)
+    SetModelAsNoLongerNeeded(model)
+    SetEntityHealth(ped, 1000)
+    SetPedArmour(ped, 1000)
+    SetPedRelationshipGroupHash(ped, group)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedCanRagdollFromPlayerImpact(ped, false)
+    SetRagdollBlockingFlags(ped, 5)
+    SetPedSuffersCriticalHits(ped, false)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    local targetPed = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(ped, targetPed, 0, 16)
+    SetPedFiringPattern(ped, 0xC6EE6B4C)
+    RetargetSpawnedPed(ped, 5000)
+end
+
+-- sync_mode: SPAWN_SINGLE
+function FX_PedsSpawnJuggernaut(alive)
+    local playerPed = PlayerPedId()
+    local playerPos = GetEntityCoords(playerPed, false)
+    local modelHash = GetHashKey("u_m_y_juggernaut_01")
+    local weaponHash = GetHashKey("WEAPON_MINIGUN")
+    local relationshipGroup = AddRelationshipGroup("_HOSTILE_JUGGERNAUT")
+    SetRelationshipBetweenGroups(5, relationshipGroup, GetHashKey("PLAYER"))
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do Citizen.Wait(0) end
+    local ped = CreatePed(4, modelHash, playerPos.x, playerPos.y, playerPos.z, GetEntityHeading(playerPed), true, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    if IsPedInAnyVehicle(playerPed, false) then
+        SetPedIntoVehicle(ped, GetVehiclePedIsIn(playerPed, false), -2)
+    end
+    SetPedRelationshipGroupHash(ped, relationshipGroup)
+    SetPedHearingRange(ped, 9999.0)
+    SetPedConfigFlag(ped, 281, true)
+    SetPedCombatAttributes(ped, 5, true)
+    SetPedCombatAttributes(ped, 46, true)
+    SetPedSuffersCriticalHits(ped, false)
+    GiveWeaponToPed(ped, weaponHash, 9999, true, true)
+    local targetPed = GetNearestPlayerPed(playerPos)
+    TaskCombatPed(ped, targetPed, 0, 16)
+    SetPedArmour(ped, 250)
+    SetPedAccuracy(ped, 3)
+    RetargetSpawnedPed(ped, 5000)
+end

@@ -1,0 +1,785 @@
+===FILE: index.html===
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chaos Mod HUD</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+</style>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="hud" class="hud-container">
+
+  <div id="cougar-counter" class="cougar-counter hidden">
+    <span class="cougar-icon">🐾</span>
+    <span id="cougar-count" class="cougar-count">0</span>
+  </div>
+
+  <div id="timer-bar" class="timer-bar">
+    <div id="timer-fill" class="timer-fill"></div>
+  </div>
+
+  <div id="effects-list" class="effects-list"></div>
+
+  <div id="vote-panel" class="vote-panel hidden">
+    <div class="vote-header">
+      <span class="vote-title">VOTE</span>
+      <span id="vote-time" class="vote-time">10s</span>
+    </div>
+    <div id="vote-options" class="vote-options"></div>
+  </div>
+
+  <div id="hit-container" class="hit-container"></div>
+
+  <div id="phase-overlay" class="phase-overlay hidden">
+    <div id="phase-text" class="phase-text"></div>
+  </div>
+
+</div>
+<script src="app.js" defer></script>
+</body>
+</html>
+===FILE: style.css===
+:root {
+  --cyan: #00f0ff;
+  --cyan-dark: #00b8cc;
+  --purple: #b44dff;
+  --orange: #ff8c00;
+  --orange-light: #ffaa33;
+  --green: #00ff88;
+  --red: #ff4444;
+  --gold: #ffcc00;
+  --panel-bg: rgba(0, 0, 0, 0.6);
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #ffffff;
+}
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.hud-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ============== TIMER BAR ============== */
+.timer-bar {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60vw;
+  max-width: 800px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.timer-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, var(--cyan-dark), var(--cyan));
+  box-shadow: 0 0 10px var(--cyan), 0 0 20px rgba(0, 240, 255, 0.4);
+  border-radius: 4px;
+  transition: width 0.1s linear;
+}
+
+.timer-bar.urgent .timer-fill {
+  animation: timer-pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes timer-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 10px var(--cyan), 0 0 20px rgba(0, 240, 255, 0.4);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 20px var(--cyan), 0 0 40px rgba(0, 240, 255, 0.9);
+  }
+}
+
+/* ============== EFFECTS LIST ============== */
+.effects-list {
+  position: fixed;
+  top: 50px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  max-width: 320px;
+}
+
+.effect-card {
+  background: var(--panel-bg);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--purple);
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 200px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 8px rgba(180, 77, 255, 0.3);
+  animation: effect-slide-in 0.3s ease-out;
+}
+
+.effect-card.removing {
+  animation: effect-fade-out 0.3s ease-in forwards;
+  pointer-events: none;
+}
+
+.effect-name {
+  font-weight: 600;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.effect-time {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 6px rgba(180, 77, 255, 0.6);
+  flex-shrink: 0;
+}
+
+@keyframes effect-slide-in {
+  from { transform: translateX(120%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes effect-fade-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(120%); opacity: 0; }
+}
+
+/* ============== VOTE PANEL ============== */
+.vote-panel {
+  position: fixed;
+  bottom: 30px;
+  right: 20px;
+  background: var(--panel-bg);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  min-width: 280px;
+  max-width: 320px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 12px rgba(255, 140, 0, 0.2);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 100;
+}
+
+.vote-panel.fading {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.vote-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.vote-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--orange);
+  text-shadow: 0 0 8px rgba(255, 140, 0, 0.6);
+}
+
+.vote-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--orange);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 6px rgba(255, 140, 0, 0.6);
+}
+
+.vote-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vote-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.vote-key {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 140, 0, 0.2);
+  border: 1px solid var(--orange);
+  color: var(--orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-shadow: 0 0 6px rgba(255, 140, 0, 0.6);
+}
+
+.vote-option-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vote-option-name {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.vote-bar-track {
+  height: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.vote-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--orange), var(--orange-light));
+  box-shadow: 0 0 6px rgba(255, 140, 0, 0.6);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.25s ease;
+}
+
+/* ============== HIT NOTIFICATIONS ============== */
+.hit-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 9998;
+}
+
+.hit-notification {
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: white;
+  text-shadow: 0 0 20px currentColor, 0 0 40px currentColor;
+  animation: hit-pop 1.5s ease-out forwards;
+  white-space: nowrap;
+  user-select: none;
+}
+
+@keyframes hit-pop {
+  0%   { transform: scale(0.5); opacity: 0; }
+  20%  { transform: scale(1.2); opacity: 1; }
+  30%  { transform: scale(1.0); opacity: 1; }
+  85%  { transform: scale(1.0); opacity: 1; }
+  100% { transform: scale(1.1); opacity: 0; }
+}
+
+/* ============== COUGAR COUNTER ============== */
+.cougar-counter {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background: var(--panel-bg);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 8px rgba(255, 204, 0, 0.2);
+  z-index: 100;
+}
+
+.cougar-icon {
+  font-size: 24px;
+  filter: drop-shadow(0 0 4px rgba(255, 200, 0, 0.6));
+  line-height: 1;
+}
+
+.cougar-count {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(255, 200, 0, 0.6);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.cougar-counter.pulse {
+  animation: cougar-pulse 0.4s ease;
+}
+
+@keyframes cougar-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
+
+/* ============== PHASE OVERLAY ============== */
+.phase-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.phase-overlay.lobby {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.phase-overlay.won {
+  background: radial-gradient(ellipse at center, rgba(0, 255, 136, 0.35), rgba(0, 0, 0, 0.75));
+}
+
+.phase-overlay.lost {
+  background: radial-gradient(ellipse at center, rgba(255, 68, 68, 0.35), rgba(0, 0, 0, 0.75));
+}
+
+.phase-text {
+  font-size: 96px;
+  font-weight: 900;
+  letter-spacing: 8px;
+  text-align: center;
+  text-shadow: 0 0 30px currentColor, 0 0 60px currentColor;
+}
+
+.phase-overlay.lobby .phase-text {
+  font-size: 36px;
+  letter-spacing: 4px;
+  color: white;
+  animation: phase-lobby-pulse 2s ease-in-out infinite;
+}
+
+.phase-overlay.won .phase-text {
+  color: var(--green);
+  animation: phase-victory 0.8s ease-out;
+}
+
+.phase-overlay.lost .phase-text {
+  color: var(--red);
+  animation: phase-wasted 0.6s ease-out;
+}
+
+@keyframes phase-lobby-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+@keyframes phase-victory {
+  0%   { transform: scale(0) rotate(-10deg); opacity: 0; }
+  60%  { transform: scale(1.2) rotate(5deg);  opacity: 1; }
+  80%  { transform: scale(0.95) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0);       opacity: 1; }
+}
+
+@keyframes phase-wasted {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-15px); }
+  20%, 40%, 60%, 80%      { transform: translateX(15px); }
+}
+
+/* ============== RESPONSIVE ============== */
+@media (max-width: 768px) {
+  .timer-bar     { width: 80vw; }
+  .effect-card   { min-width: 160px; }
+  .vote-panel    { min-width: 240px; right: 10px; bottom: 20px; }
+  .hit-notification { font-size: 32px; letter-spacing: 2px; }
+  .phase-text    { font-size: 64px; letter-spacing: 4px; }
+  .effects-list  { right: 10px; top: 45px; }
+}
+
+@media (max-height: 500px) {
+  .timer-bar     { top: 10px; }
+  .effects-list  { top: 35px; }
+  .vote-panel    { bottom: 10px; }
+  .cougar-counter { top: 10px; }
+}
+===FILE: app.js===
+(function () {
+  'use strict';
+
+  // ============== DOM REFERENCES ==============
+  const timerBar      = document.getElementById('timer-bar');
+  const timerFill     = document.getElementById('timer-fill');
+  const effectsList   = document.getElementById('effects-list');
+  const votePanel     = document.getElementById('vote-panel');
+  const voteTime      = document.getElementById('vote-time');
+  const voteOptions   = document.getElementById('vote-options');
+  const hitContainer  = document.getElementById('hit-container');
+  const cougarCounter = document.getElementById('cougar-counter');
+  const cougarCount   = document.getElementById('cougar-count');
+  const phaseOverlay  = document.getElementById('phase-overlay');
+  const phaseText     = document.getElementById('phase-text');
+
+  // ============== STATE ==============
+  const effectsState = new Map();
+  const voteState = {
+    visible: false,
+    elements: [],     // [{ nameEl, fillEl }]
+    pendingHide: null
+  };
+  let lastCougarCount = 0;
+  let currentPhase = null;
+
+  // ============== HELPERS ==============
+  function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+  }
+
+  function formatSeconds(s) {
+    const v = Math.max(0, Math.ceil(Number(s) || 0));
+    return v + 's';
+  }
+
+  // ============== TIMER ==============
+  function updateTimer(progress) {
+    const p = clamp(Number(progress) || 0, 0, 1);
+    timerFill.style.width = (p * 100) + '%';
+    if (p < 0.2) {
+      timerBar.classList.add('urgent');
+    } else {
+      timerBar.classList.remove('urgent');
+    }
+  }
+
+  // ============== EFFECTS LIST ==============
+  function updateEffects(list) {
+    if (!Array.isArray(list)) list = [];
+    const maxEffects = 3;
+    const display = list.slice(0, maxEffects);
+    const newNames = new Set();
+
+    display.forEach(function (eff) {
+      if (eff && eff.name) newNames.add(eff.name);
+    });
+
+    // Mark missing ones for removal
+    effectsState.forEach(function (data, name) {
+      if (!newNames.has(name)) {
+        if (data.element && data.element.parentNode && !data.removing) {
+          data.removing = true;
+          data.element.classList.add('removing');
+          const el = data.element;
+          setTimeout(function () {
+            if (el.parentNode) el.parentNode.removeChild(el);
+          }, 320);
+        }
+        effectsState.delete(name);
+      }
+    });
+
+    // Add or update
+    display.forEach(function (eff) {
+      if (!eff || !eff.name) return;
+      const remaining = Math.max(0, Number(eff.remaining) || 0);
+      const existing = effectsState.get(eff.name);
+      if (existing && !existing.removing) {
+        existing.timeEl.textContent = formatSeconds(remaining);
+      } else {
+        const card = document.createElement('div');
+        card.className = 'effect-card';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'effect-name';
+        nameEl.textContent = eff.name;
+
+        const timeEl = document.createElement('span');
+        timeEl.className = 'effect-time';
+        timeEl.textContent = formatSeconds(remaining);
+
+        card.appendChild(nameEl);
+        card.appendChild(timeEl);
+        effectsList.appendChild(card);
+
+        effectsState.set(eff.name, {
+          element: card,
+          timeEl: timeEl,
+          removing: false
+        });
+      }
+    });
+
+    // Cap visible cards in DOM (defensive: extra cleanup if list grew)
+    while (effectsList.children.length > maxEffects) {
+      const last = effectsList.lastChild;
+      if (last) effectsList.removeChild(last);
+    }
+  }
+
+  // ============== VOTE ==============
+  function buildVoteOptions(options) {
+    voteOptions.innerHTML = '';
+    voteState.elements = [];
+    const max = Math.min(3, options.length);
+    for (let i = 0; i < max; i++) {
+      const opt = options[i];
+      if (!opt || !opt.name) continue;
+
+      const optEl = document.createElement('div');
+      optEl.className = 'vote-option';
+
+      const keyEl = document.createElement('div');
+      keyEl.className = 'vote-key';
+      keyEl.textContent = String(i + 1);
+
+      const contentEl = document.createElement('div');
+      contentEl.className = 'vote-option-content';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'vote-option-name';
+      nameEl.textContent = opt.name;
+
+      const trackEl = document.createElement('div');
+      trackEl.className = 'vote-bar-track';
+      const fillEl = document.createElement('div');
+      fillEl.className = 'vote-bar-fill';
+      trackEl.appendChild(fillEl);
+
+      contentEl.appendChild(nameEl);
+      contentEl.appendChild(trackEl);
+      optEl.appendChild(keyEl);
+      optEl.appendChild(contentEl);
+      voteOptions.appendChild(optEl);
+
+      voteState.elements.push({ nameEl: nameEl, fillEl: fillEl });
+    }
+  }
+
+  function updateVote(data) {
+    if (voteState.pendingHide) {
+      clearTimeout(voteState.pendingHide);
+      voteState.pendingHide = null;
+    }
+
+    const options = (data && Array.isArray(data.options)) ? data.options : [];
+    const timeLeft = (data && typeof data.timeLeft === 'number') ? data.timeLeft : 0;
+
+    if (options.length === 0 || timeLeft <= 0) {
+      hideVote();
+      return;
+    }
+
+    // If first time visible, build the structure
+    if (!voteState.visible) {
+      buildVoteOptions(options);
+      votePanel.classList.remove('hidden');
+      votePanel.classList.remove('fading');
+      voteState.visible = true;
+    } else {
+      // If option count differs, rebuild
+      if (voteState.elements.length !== Math.min(3, options.length)) {
+        buildVoteOptions(options);
+      } else {
+        // Update names in case
+        for (let i = 0; i < voteState.elements.length; i++) {
+          const opt = options[i];
+          if (opt && opt.name && voteState.elements[i]) {
+            voteState.elements[i].nameEl.textContent = opt.name;
+          }
+        }
+      }
+    }
+
+    // Update vote bars
+    const totalVotes = options.reduce(function (sum, o) {
+      return sum + Math.max(0, Number(o.votes) || 0);
+    }, 0);
+
+    for (let i = 0; i < voteState.elements.length; i++) {
+      const opt = options[i];
+      const votes = Math.max(0, Number(opt && opt.votes) || 0);
+      const pct = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
+      const fillEl = voteState.elements[i].fillEl;
+      // Reset to 0 then animate so transitions trigger on first show
+      if (fillEl.style.width === '') {
+        fillEl.style.width = '0%';
+        requestAnimationFrame(function (el, p) {
+          return function () { el.style.width = p + '%'; };
+        }(fillEl, pct));
+      } else {
+        fillEl.style.width = pct + '%';
+      }
+    }
+
+    voteTime.textContent = Math.ceil(timeLeft) + 's';
+  }
+
+  function hideVote() {
+    if (!voteState.visible) return;
+    votePanel.classList.add('fading');
+    voteState.pendingHide = setTimeout(function () {
+      votePanel.classList.add('hidden');
+      votePanel.classList.remove('fading');
+      voteState.visible = false;
+      voteState.elements = [];
+      voteState.pendingHide = null;
+    }, 320);
+  }
+
+  // ============== HITS ==============
+  const hitGlowColors = {
+    'REVERSED!':  '#ff00ff',
+    'CRITICAL!':  '#ff4444',
+    'HEADSHOT!':  '#ffaa00',
+    'COMBO!':     '#00f0ff',
+    'BONUS!':     '#00ff88',
+    'PERFECT!':   '#ffcc00',
+    'LUCKY!':     '#b44dff',
+    'CHAOS!':     '#ff8c00'
+  };
+
+  function showHit(variant) {
+    if (!variant || typeof variant !== 'string') return;
+    const hit = document.createElement('div');
+    hit.className = 'hit-notification';
+    hit.textContent = variant;
+    const glow = hitGlowColors[variant] || '#ffffff';
+    hit.style.textShadow = '0 0 20px ' + glow + ', 0 0 40px ' + glow + ', 0 0 60px ' + glow;
+    hitContainer.appendChild(hit);
+    setTimeout(function () {
+      if (hit.parentNode) hit.parentNode.removeChild(hit);
+    }, 1550);
+  }
+
+  // ============== COUGARS ==============
+  function updateCougars(count) {
+    const c = Math.max(0, Math.floor(Number(count) || 0));
+    if (c <= 0) {
+      cougarCounter.classList.add('hidden');
+      lastCougarCount = 0;
+      return;
+    }
+    cougarCounter.classList.remove('hidden');
+    if (c !== lastCougarCount) {
+      cougarCount.textContent = String(c);
+      cougarCounter.classList.remove('pulse');
+      // Force reflow to restart animation
+      void cougarCounter.offsetWidth;
+      cougarCounter.classList.add('pulse');
+      lastCougarCount = c;
+    }
+  }
+
+  // ============== PHASE ==============
+  function updatePhase(phase) {
+    if (phase === currentPhase) return;
+
+    if (phase === 'RUNNING' || phase == null) {
+      phaseOverlay.classList.add('hidden');
+      phaseOverlay.classList.remove('lobby', 'won', 'lost');
+      phaseText.textContent = '';
+      currentPhase = phase;
+      return;
+    }
+
+    phaseOverlay.classList.remove('hidden', 'lobby', 'won', 'lost');
+    if (phase === 'LOBBY') {
+      phaseOverlay.classList.add('lobby');
+      phaseText.textContent = 'WAITING FOR PLAYERS...';
+    } else if (phase === 'WON') {
+      phaseOverlay.classList.add('won');
+      phaseText.textContent = 'VICTORY';
+    } else if (phase === 'LOST') {
+      phaseOverlay.classList.add('lost');
+      phaseText.textContent = 'WASTED';
+    } else {
+      phaseOverlay.classList.add('hidden');
+    }
+    currentPhase = phase;
+  }
+
+  // ============== MESSAGE HANDLER ==============
+  window.addEventListener('message', function (event) {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    switch (data.type) {
+      case 'timer':
+        updateTimer(data.progress);
+        break;
+      case 'effects':
+        updateEffects(data.list);
+        break;
+      case 'vote':
+        updateVote(data);
+        break;
+      case 'hit':
+        showHit(data.variant);
+        break;
+      case 'cougars':
+        updateCougars(data.count);
+        break;
+      case 'phase':
+        updatePhase(data.phase);
+        break;
+      default:
+        break;
+    }
+  });
+
+})();

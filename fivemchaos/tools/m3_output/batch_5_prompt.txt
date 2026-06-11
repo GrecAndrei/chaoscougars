@@ -1,0 +1,511 @@
+Convert these 50 FiveM Lua chaos effects to multiplayer-safe versions. Classify each with sync_mode and apply ownership guards where needed. Keep function names exactly as they are.
+
+function FX_PlayerSpinCamera(alive)
+    spinningCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    RenderScriptCams(true, true, 10, true, true)
+
+    while alive() do
+        camRot = camRot + camRotRate
+        SetCamActive(spinningCamera, true)
+        local coord = GetGameplayCamCoord()
+        local rot = GetGameplayCamRot(2)
+        local fov = GetGameplayCamFov()
+        SetCamParams(spinningCamera, coord.x, coord.y, coord.z, rot.x, camRot, rot.z, fov, 0, 1, 1, 2)
+        Citizen.Wait(0)
+    end
+
+    SetCamActive(spinningCamera, false)
+    RenderScriptCams(false, true, 700, true, true)
+    DestroyCam(spinningCamera, true)
+    spinningCamera = 0
+end
+
+function FX_ScreenMexico(alive)
+    while alive() do
+        SetTransitionTimecycleModifier("trevorspliff", 5.0)
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenBright(alive)
+    while alive() do
+        SetTransitionTimecycleModifier("mp_x17dlc_int_02", 5.0)
+        SetTimecycleModifierStrength(1.0)
+        SetWeatherTypeNow("EXTRASUNNY")
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+    for _, veh in ipairs(GetGamePool("CVehicle")) do
+        SetVehicleLights(veh, 0)
+        SetVehicleLightMultiplier(veh, 1.0)
+    end
+end
+
+function FX_ScreenFog(alive)
+    while alive() do
+        SetTransitionTimecycleModifier("prologue_ending_fog", 5.0)
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenLowrenderdist(alive)
+    while alive() do
+        SetTransitionTimecycleModifier("Mp_apart_mid", 5.0)
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenLsd(alive)
+    while alive() do
+        SetTimecycleModifier("drug_drive_blend01")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenFullbright(alive)
+    SetClockTime(0, 0, 0)
+    while alive() do
+        SetTransitionTimecycleModifier("int_lesters", 5.0)
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenBubblevision(alive)
+    while alive() do
+        SetTransitionTimecycleModifier("ufo_deathray", 5.0)
+        SetTimecycleModifierStrength(1.0)
+        SetAudioSpecialEffectMode(1)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenLsnoire(alive)
+    while alive() do
+        SetTimecycleModifier("NG_filmic01")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenNeedglasses(alive)
+    while alive() do
+        SetTransitionTimecycleModifier("hud_def_blur", 5.0)
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_TimecycleFuzzy(alive)
+    while alive() do
+        SetTransitionTimecycleModifier("Broken_camera_fuzz", 5.0)
+        SetTimecycleModifierStrength(0.5)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_TimecycleDarkworld(alive)
+    while alive() do
+        SetArtificialLightsState(true)
+        SetTransitionTimecycleModifier("dlc_island_vault", 5.0)
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    SetArtificialLightsState(false)
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenArc(alive)
+    while alive() do
+        SetTimecycleModifier("trevorspliff")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenColorfulworld(alive)
+    while alive() do
+        SetTimecycleModifier("ufo_deathray")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenDimwarp(alive)
+    while alive() do
+        SetTimecycleModifier("hud_def_blur")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenFckautorotate(alive)
+    while alive() do
+        SetTimecycleModifier("Tunnel")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenFoldedscreen(alive)
+    while alive() do
+        SetTimecycleModifier("Tunnel")
+        SetTimecycleModifierStrength(0.8)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenFourthdimension(alive)
+    while alive() do
+        SetTimecycleModifier("phone_cam8")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenHueshift(alive)
+    while alive() do
+        SetTimecycleModifier("phone_cam8")
+        SetTimecycleModifierStrength(0.7)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenInvertedcolors(alive)
+    while alive() do
+        SetTimecycleModifier("ArenaEMP")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenLocalcoop(alive)
+    while alive() do
+        SetTimecycleModifier("yell_tunnel_nodirect")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenMirrored(alive)
+    while alive() do
+        SetTimecycleModifier("hud_def_blur")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenRgbland(alive)
+    while alive() do
+        SetTimecycleModifier("ufo_deathray")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenScreenfreakout(alive)
+    while alive() do
+        SetTimecycleModifier("trevorspliff")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenScreenpotato(alive)
+    while alive() do
+        SetTimecycleModifier("Mp_apart_mid")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenShatteredscreen(alive)
+    while alive() do
+        SetTimecycleModifier("Broken_camera_fuzz")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenSwappedcolors(alive)
+    while alive() do
+        SetTimecycleModifier("ArenaEMP")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenTextureless(alive)
+    while alive() do
+        SetTimecycleModifier("int_lesters")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenTnpanel(alive)
+    while alive() do
+        SetTimecycleModifier("Tunnel")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_ScreenWarpedcam(alive)
+    while alive() do
+        SetTimecycleModifier("Tunnel")
+        SetTimecycleModifierStrength(1.0)
+        Citizen.Wait(250)
+    end
+    ClearTimecycleModifier()
+end
+
+function FX_TimeMorning(alive)
+    SetClockTime(8, 0, 0)
+end
+
+function FX_TimeDay(alive)
+    SetClockTime(12, 0, 0)
+end
+
+function FX_TimeEvening(alive)
+    SetClockTime(18, 0, 0)
+end
+
+function FX_TimeNight(alive)
+    SetClockTime(0, 0, 0)
+end
+
+function FX_TimeQuickday(alive)
+    while alive() do
+        AddToClockTime(0, 1, 0)
+        Citizen.Wait(0)
+    end
+end
+
+function FX_TimeLocalTime(alive)
+    NetworkClockTimeOverride(GetClockHours(), GetClockMinutes(), GetClockSeconds(), 0, true)
+end
+
+function FX_TimeX02(alive)
+    while alive() do
+        SetAudioFlag("AllowScriptedSpeechInSlowMo", true)
+        SetAudioFlag("AllowAmbientSpeechInSlowMo", true)
+        -- Hooks::SetAudioPitchFromSpeedMult(0.2)
+        SetTimeScale(0.2)
+        Citizen.Wait(0)
+    end
+    SetAudioFlag("AllowScriptedSpeechInSlowMo", false)
+    SetAudioFlag("AllowAmbientSpeechInSlowMo", false)
+    -- Hooks::ResetAudioPitch
+    SetTimeScale(1.0)
+end
+
+function FX_TimeX05(alive)
+    while alive() do
+        SetAudioFlag("AllowScriptedSpeechInSlowMo", true)
+        SetAudioFlag("AllowAmbientSpeechInSlowMo", true)
+        -- Hooks::SetAudioPitchFromSpeedMult(0.5)
+        SetTimeScale(0.5)
+        Citizen.Wait(0)
+    end
+    SetAudioFlag("AllowScriptedSpeechInSlowMo", false)
+    SetAudioFlag("AllowAmbientSpeechInSlowMo", false)
+    -- Hooks::ResetAudioPitch
+    SetTimeScale(1.0)
+end
+
+local lastCheck = 0
+
+function FX_TimeSuperhot(alive)
+    while alive() do
+        local currentTime = GetGameTimer()
+        if currentTime - lastCheck > 100 then
+            lastCheck = currentTime
+            local playerPed = PlayerPedId()
+            local gameSpeed = 1.0
+            if not IsPedGettingIntoAVehicle(playerPed) and not IsPedClimbing(playerPed)
+               and not IsPedDiving(playerPed) and not IsPedJumpingOutOfVehicle(playerPed)
+               and not IsPedRagdoll(playerPed) and not IsPedGettingUp(playerPed) then
+                local speed = GetEntitySpeed(playerPed)
+                gameSpeed = math.max(math.min(speed, 4.0) / 4.0, 0.2)
+            end
+            SetTimeScale(gameSpeed)
+        end
+        Citizen.Wait(0)
+    end
+    SetTimeScale(1.0)
+end
+
+function FX_Veh30mphlimit(alive)
+    while alive() do
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            if DoesEntityExist(veh) and not IsPedAPlayer(GetPedInVehicleSeat(veh, -1, false)) then
+                SetEntityMaxSpeed(veh, 13.41)
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_VehsHonkconstant(alive)
+    while alive() do
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            if DoesEntityExist(veh) then
+                SetHornPermanentlyOn(veh, true)
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_VehsUpupaway(alive)
+    for _, veh in ipairs(GetGamePool('CVehicle')) do
+        local vel = GetEntityVelocity(veh)
+        SetEntityVelocity(veh, vel.x, vel.y, 100.0)
+    end
+end
+
+function FX_VehsBeyblade(alive)
+    while alive() do
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            if DoesEntityExist(veh) and IsVehicleSeatFree(veh, -1, false) then
+                ApplyForceToEntity(veh, 3, 100.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0, true, true, true, true, true)
+                ApplyForceToEntity(veh, 3, -100.0, 0.0, 0.0, 0.0, -4.0, 0.0, 0, true, true, true, true, true)
+                SetEntityInvincible(veh, true)
+            end
+        end
+        Citizen.Wait(0)
+    end
+    for _, veh in ipairs(GetGamePool('CVehicle')) do
+        SetEntityInvincible(veh, false)
+    end
+end
+
+function FX_VehBoostbrake(alive)
+    while alive() do
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            if DoesEntityExist(veh) then
+                local speed = GetEntitySpeed(veh)
+                if speed > 1.0 and GetEntityHeightAboveGround(veh) <= 2.0 then
+                    SetVehicleForwardSpeed(veh, speed * -1.5)
+                end
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_VehBouncy(alive)
+    while alive() do
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            if DoesEntityExist(veh) and HasEntityCollidedWithAnything(veh) then
+                local vel = GetEntityVelocity(veh)
+                local factor = (vel.x < 10 and vel.y < 10 and vel.z < 10) and 300.0 or 60.0
+                ApplyForceToEntity(veh, 0, vel.x * -factor, vel.y * -factor, vel.z * -factor, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_VehBrakeboost(alive)
+    while alive() do
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            if DoesEntityExist(veh) then
+                local vehClass = GetVehicleClass(veh)
+                if vehClass ~= 15 and vehClass ~= 16 then
+                    ApplyForceToEntity(veh, 0, 0.0, 50.0, 0.0, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
+                end
+            end
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_PlayervehBreakdoors(alive)
+    local count = 10
+    for _, veh in ipairs(GetGamePool('CVehicle')) do
+        for i = 0, 5 do
+            SetVehicleDoorBroken(veh, i, false)
+            count = count - 1
+            if count == 0 then
+                count = 10
+                Citizen.Wait(0)
+            end
+        end
+    end
+end
+
+function FX_PlayerForcedcinematiccam(alive)
+    while alive() do
+        SetPlayerCanDoDriveBy(PlayerId(), false)
+        SetCinematicModeActive(true)
+        DisableControlAction(0, 80, true)
+        if IsPedInAnyVehicle(PlayerPedId(), false) then
+            DisableControlAction(0, 27, true)
+            DisableControlAction(0, 0, true)
+        end
+        Citizen.Wait(0)
+    end
+    SetCinematicModeActive(false)
+    SetPlayerCanDoDriveBy(PlayerId(), true)
+end
+
+function FX_VehsRed(alive)
+    while alive() do
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            ToggleVehicleMod(veh, 20, true)
+            SetVehicleTyreSmokeColor(veh, 255, 0, 0)
+            SetVehicleCustomPrimaryColour(veh, 255, 0, 0)
+            SetVehicleCustomSecondaryColour(veh, 255, 0, 0)
+            SetVehicleEnveffScale(veh, 0.0)
+            SetVehicleDirtLevel(veh, 0.0)
+        end
+        Citizen.Wait(0)
+    end
+end
+
+function FX_VehsBlue(alive)
+    while alive() do
+        for _, veh in ipairs(GetGamePool('CVehicle')) do
+            ToggleVehicleMod(veh, 20, true)
+            SetVehicleTyreSmokeColor(veh, 0, 0, 255)
+            SetVehicleCustomPrimaryColour(veh, 0, 0, 255)
+            SetVehicleCustomSecondaryColour(veh, 0, 0, 255)
+            SetVehicleEnveffScale(veh, 0.0)
+            SetVehicleDirtLevel(veh, 0.0)
+        end
+        Citizen.Wait(0)
+    end
+end

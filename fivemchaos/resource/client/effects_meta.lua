@@ -70,7 +70,10 @@ function FX_MetaChaosRamp(alive)
     MetaSetInternal('timerModifier', 1.0)
 end
 
--- Meta effects call server directly since they originate from chaos system
+-- MetaSetInternal is a no-op now. The server applies meta state directly
+-- in chaos.lua's DispatchEffect (see fx.meta in the registry). It calls
+-- TriggerServerEvent('cc:meta_set_internal', ...) with admin ACE, so
+-- direct client invocations would be rejected. This stub keeps the
+-- client META effect bodies from crashing.
 function MetaSetInternal(key, value)
-    TriggerServerEvent('cc:meta_set_internal', key, value)
 end

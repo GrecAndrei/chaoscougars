@@ -136,7 +136,7 @@ RegisterCommand('cc_test_cougars', function(src)
                 math.random(-30, 30) + (i * 10),
                 0.0
             )
-            TriggerClientEvent('cc:spawn_cougar', player, ctype, spawnPos + offset)
+            TriggerClientEvent('cc:spawn_cougar', -1, ctype, spawnPos + offset, player)
 
             -- Wait up to 10s for confirmation
             local waited = 0

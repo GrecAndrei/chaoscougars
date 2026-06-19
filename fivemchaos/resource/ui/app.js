@@ -16,6 +16,10 @@
   var statPhase     = document.getElementById('stat-phase');
   var statDiff      = document.getElementById('stat-diff');
   var statCougars   = document.getElementById('stat-cougars');
+  var votePanel     = document.getElementById('vote-panel');
+  var voteTime      = document.getElementById('vote-time');
+  var voteOptions   = document.getElementById('vote-options');
+  var voteTick      = null;
 
   var MAX_EFFECTS = 5;
   var activeEffects = new Map();
@@ -66,7 +70,14 @@
     effectsList.appendChild(card);
     activeEffects.set(id, { el: card, timeEl: timeEl, expiresAt: Date.now() + duration * 1000 });
     while (effectsList.children.length > MAX_EFFECTS) {
-      effectsList.removeChild(effectsList.firstChild);
+      var removed = effectsList.removeChild(effectsList.firstChild);
+      if (removed) {
+        var orphanId = null;
+        activeEffects.forEach(function (entry, key) {
+          if (entry.el === removed) orphanId = key;
+        });
+        if (orphanId !== null) activeEffects.delete(orphanId);
+      }
     }
     startEffectTick();
   }
@@ -107,6 +118,63 @@
       phaseOverlay.classList.remove('won', 'lost');
       phaseText.textContent = '';
     }
+  }
+
+  // ============== VOTE ==============
+  function showVote(opts, timeLeft, threshold) {
+    if (!votePanel || !voteTime || !voteOptions) return;
+    var maxVotes = Math.max(threshold || 1, 1);
+    voteOptions.innerHTML = '';
+    var options = Array.isArray(opts) ? opts : [];
+    options.forEach(function (opt, idx) {
+      var row = document.createElement('div');
+      row.className = 'vote-option';
+      var key = document.createElement('span');
+      key.className = 'vote-key';
+      key.textContent = (idx + 1).toString();
+      var content = document.createElement('div');
+      content.className = 'vote-option-content';
+      var nameEl = document.createElement('div');
+      nameEl.className = 'vote-option-name';
+      nameEl.textContent = String(opt.name || 'Option');
+      var barTrack = document.createElement('div');
+      barTrack.className = 'vote-bar-track';
+      var barFill = document.createElement('div');
+      barFill.className = 'vote-bar-fill';
+      var votes = Math.max(0, Number(opt.votes) || 0);
+      barFill.style.width = Math.min(100, (votes / maxVotes) * 100) + '%';
+      barTrack.appendChild(barFill);
+      content.appendChild(nameEl);
+      content.appendChild(barTrack);
+      row.appendChild(key);
+      row.appendChild(content);
+      voteOptions.appendChild(row);
+    });
+    var t = Math.max(0, Math.ceil(Number(timeLeft) || 0));
+    voteTime.textContent = t + 's';
+    votePanel.classList.remove('hidden', 'fading');
+    if (voteTick) clearInterval(voteTick);
+    voteTick = setInterval(function () {
+      t -= 1;
+      if (t <= 0) {
+        clearInterval(voteTick);
+        voteTick = null;
+        clearVote();
+      } else {
+        voteTime.textContent = t + 's';
+      }
+    }, 1000);
+  }
+
+  function clearVote() {
+    if (!votePanel) return;
+    if (voteTick) { clearInterval(voteTick); voteTick = null; }
+    votePanel.classList.add('fading');
+    setTimeout(function () {
+      votePanel.classList.add('hidden');
+      votePanel.classList.remove('fading');
+      if (voteOptions) voteOptions.innerHTML = '';
+    }, 300);
   }
 
   // ============== HITS ==============
@@ -182,6 +250,10 @@
           if (entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
         });
         activeEffects.clear();
+        if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+        timerBar.classList.add('hidden');
+        timerFill.style.width = '0%';
+        timerLabel.textContent = '';
         break;
       case 'hit':
         showHit(data.variant);
@@ -200,10 +272,18 @@
         updatePhase(data.result);
         break;
       case 'death':
-        showHit('WASTED');
+        var who = (data && data.player) ? data.player : 'Someone';
+        var alive = (data && typeof data.alive === 'number') ? data.alive : null;
+        showHit(alive !== null ? (who + ' KIA — ' + alive + ' left') : (who + ' KIA'));
         break;
       case 'difficulty':
         statDiff.textContent = Math.round((data.value || 0) * 100) + '%';
+        break;
+      case 'vote':
+        showVote(data.options, data.timeLeft, data.threshold);
+        break;
+      case 'vote_end':
+        clearVote();
         break;
       case 'panel_toggle':
         togglePanel(data.open);

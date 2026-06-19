@@ -8,6 +8,24 @@ function OwnershipGuard.IsOwner(entity)
     return NetworkGetEntityOwner(entity) == PlayerId()
 end
 
+-- True if THIS client currently drives the AI for this entity. Unlike
+-- OwnershipGuard.IsOwner (a one-shot check), this actively reclaims control
+-- and waits up to 1s when the engine hands ownership to someone else. This
+-- is the universal gate replacing the old "OwnershipGuard.IsOwner(ped)"
+-- checks for cougar / spawned-ped AI threads in both spawner.lua and
+-- effects_spawn.lua.
+function AIIsMine(ent)
+    if not DoesEntityExist(ent) or IsEntityDead(ent) then return false end
+    if NetworkHasControlOfEntity(ent) then return true end
+    NetworkRequestControlOfEntity(ent)
+    local t = 0
+    while not NetworkHasControlOfEntity(ent) and t < 20 do
+        Citizen.Wait(50)
+        t = t + 1
+    end
+    return NetworkHasControlOfEntity(ent)
+end
+
 function OwnershipGuard.ForEachOwnedVehicle(fn)
     for _, veh in ipairs(GetGamePool('CVehicle')) do
         if OwnershipGuard.IsOwner(veh) then

@@ -1,78 +1,235 @@
+--[[
+    Helper functions used by FX_* effects below.
+    These were originally emitted by tools/transpile_effects.py into a header
+    file that was concatenated before the generated body. To make the resource
+    self-contained (no build step required), the helpers are inlined here.
+    Mirrors the definitions in tools/m3_output/header.lua.
+]]
+
+local _CHAOS_PED_MODELS = {
+    "a_m_m_acult_01", "a_m_m_afriamer_01", "a_m_m_beach_02", "a_m_m_busicas_01",
+    "a_m_m_farmer_01", "a_m_m_fatlatin_01", "a_m_m_hillbilly_02", "a_m_m_indian_01",
+    "a_m_m_og_boss_01", "a_m_m_paparazzi_01", "a_m_m_rurmeth_01", "a_m_m_salton_04",
+    "a_m_m_skater_01", "a_m_m_socenlat_01", "a_m_m_tourist_01", "a_m_o_acult_02",
+    "a_m_o_beach_01", "a_m_o_salton_01", "a_m_y_acult_02", "a_m_y_beach_02",
+    "a_m_y_beachvesp_02", "a_m_y_business_03", "a_m_y_cyclist_01", "a_m_y_eastsa_02",
+    "a_m_y_genstreet_01", "a_m_y_genstreet_02", "a_m_y_hipster_01", "a_m_y_jetski_01",
+    "a_m_y_mexthug_01", "a_m_y_motox_02", "a_m_y_musclbeac_01", "a_m_y_rurmeth_01",
+    "a_m_y_salton_01", "a_m_y_skater_02", "a_m_y_stlat_01", "a_m_y_stwhi_02",
+    "a_m_y_sunbathe_01", "a_m_y_surfer_01", "a_m_y_vindouche_01", "a_m_y_yoga_01",
+    "a_f_m_beach_01", "a_f_m_fatcult_01", "a_f_m_salton_01", "a_f_m_skidrow_01",
+    "a_f_m_tourist_01", "a_f_o_genstreet_01", "a_f_o_soucent_01", "a_f_y_beach_01",
+    "a_f_y_hipster_01", "a_f_y_juggalo_01", "a_f_y_runner_01", "a_f_y_vinewood_04",
+    "a_f_y_yoga_01", "s_m_m_autoshop_01", "s_m_m_bouncer_01", "s_m_m_chemsec_01",
+    "s_m_m_ciasec_01", "s_m_m_dockwork_01", "s_m_m_highsec_01", "s_m_m_lifeinvad_01",
+    "s_m_m_movprem_01", "s_m_m_pilot_02", "s_m_m_security_01", "s_m_m_ups_02",
+    "s_m_y_airworker", "s_m_y_blackops_01", "s_m_y_construct_01", "s_m_y_fireman_01",
+    "s_m_y_marine_01", "s_m_y_pilot_01", "s_m_y_prisoner_01",
+}
+
+local function _ChaosCreateRandomPed(x, y, z, heading)
+    local modelName = _CHAOS_PED_MODELS[math.random(#_CHAOS_PED_MODELS)]
+    local model = GetHashKey(modelName)
+    RequestModel(model)
+    local t = 20
+    while not HasModelLoaded(model) and t > 0 do
+        Citizen.Wait(50)
+        t = t - 1
+    end
+    local ped = CreatePed(26, model, x, y, z, heading, true, false)
+    SetModelAsNoLongerNeeded(model)
+    return ped
+end
+
+local function _ChaosCreateHostilePed(model, weapon)
+    local playerPed = PlayerPedId()
+    local pos = GetEntityCoords(playerPed, false)
+    local ped = CreatePed(26, model, pos.x, pos.y, pos.z, GetEntityHeading(playerPed), true, false)
+    if ped ~= 0 then
+        SetPedAsEnemy(ped, true)
+        if weapon and weapon ~= 0 then
+            GiveWeaponToPed(ped, weapon, 9999, true, true)
+        end
+        SetPedCombatAttributes(ped, 5, true)
+        SetPedCombatAttributes(ped, 46, true)
+        local nearest = GetNearestPlayerPed(GetEntityCoords(ped)) or playerPed
+        TaskCombatPed(ped, nearest, 0, 16)
+        SetPedFiringPattern(ped, 0xC6EE6B4C)
+    end
+    return ped
+end
+
+-- 3-arg variant: spawn at a given position (used by FX_PedsHotcougars)
+local function CreateHostilePed(model, weapon, pos)
+    local ped = CreatePed(28, model, pos.x, pos.y, pos.z, math.random(0, 360) + 0.0, true, true)
+    if ped ~= 0 then
+        SetPedAsEnemy(ped, true)
+        if weapon and weapon ~= 0 then
+            GiveWeaponToPed(ped, weapon, 9999, true, true)
+        end
+        SetPedCombatAttributes(ped, 5, true)
+        SetPedCombatAttributes(ped, 46, true)
+        local nearest = GetNearestPlayerPed(GetEntityCoords(ped)) or PlayerPedId()
+        TaskCombatPed(ped, nearest, 0, 16)
+        SetPedFiringPattern(ped, 0xC6EE6B4C)
+    end
+    return ped
+end
+
+-- ===== Pool-clone helpers (used by FX_PedsCloneOnDeath) =====
+-- Spawns a clone of a dead ped at the ped's position. Used by the
+-- "clone on death" effect to replace a dead NPC/player with a clone.
+local function CreatePoolClonePed(ped)
+    if not ped or not DoesEntityExist(ped) then return 0 end
+    local model = GetEntityModel(ped)
+    local coords = GetEntityCoords(ped)
+    local heading = GetEntityHeading(ped)
+    local clone = CreatePed(4, model, coords.x, coords.y, coords.z, heading, true, false)
+    if clone ~= 0 then
+        SetBlockingOfNonTemporaryEvents(clone, true)
+        SetPedKeepTask(clone, true)
+    end
+    return clone
+end
+
+local function CreatePoolCloneVehicle(veh)
+    if not veh or not DoesEntityExist(veh) then return 0 end
+    local model = GetEntityModel(veh)
+    local coords = GetEntityCoords(veh)
+    local heading = GetEntityHeading(veh)
+    local clone = CreateVehicle(model, coords.x, coords.y, coords.z, heading, true, false)
+    if clone ~= 0 then
+        SetVehicleOnGroundProperly(clone)
+    end
+    return clone
+end
+
+-- ===== Coord helper (used by orbital-cam and cougar-spawn effects) =====
+-- Returns a vector3 around the entity at the given heading (degrees) and
+-- distance. ground=true snaps to ground; use raw 0 otherwise.
+local function GetCoordAround(entity, headingDeg, distance, zCorrection, ground)
+    local pos = GetEntityCoords(entity)
+    local rad = math.rad(headingDeg)
+    local x = pos.x + math.cos(rad) * distance
+    local y = pos.y + math.sin(rad) * distance
+    local z = pos.z + (zCorrection or 0.0)
+    if ground then
+        local found, groundZ = GetGroundZFor_3dCoord(x, y, z + 50.0, false)
+        if found then z = groundZ + 1.0 end
+    end
+    return vector3(x, y, z)
+end
+
+-- ===== Stunt-jump / store-teleport tables (used by FX_PlayerTpStunt, FX_PlayerTpStore) =====
+-- A curated set of safe, well-known stunt-jump and 24/7-store teleport
+-- locations. If empty, the effects that reference these no-op gracefully.
+local allPossibleJumps = {
+    vector3(  120.0,  1280.0,  95.0),  -- Vinewood sign approach
+    vector3( -700.0, -1300.0,  20.0),  -- Airport ramp
+    vector3(  -50.0,  1900.0, 200.0),  -- Grapeseed bridge
+    vector3(  250.0,  -800.0,  85.0),  -- Eclipse towers
+    vector3( -900.0,   600.0, 110.0),  -- Great Chaparral cliff
+    vector3( 1500.0,  3700.0,  35.0),  -- Sandy Shores aqueduct
+    vector3( 2000.0,  4500.0,  45.0),  -- Harmony billboard
+    vector3( -500.0,  2800.0,  50.0),  -- Route 68 jump
+}
+
+local allPossibleStores = {
+    vector3(  -50.0,  -1750.0,  29.0),  -- LTD Gasoline
+    vector3(  255.0,   -45.0,  69.0),  -- Rob's Liquor
+    vector3(-709.0,   -905.0,  19.0),  -- 24/7
+    vector3( 373.0,   328.0,  103.0),  -- 24/7 Mirror Park
+    vector3(-1222.0,  -906.0,  12.0),  -- 24/7 Inglewood
+    vector3(-1487.0,  -375.0,  39.0),  -- LTD Richman Glen
+    vector3(-2967.0,   391.0,  15.0),  -- LTD Banham Canyon
+    vector3(  267.0,  -1261.0,  29.0),  -- Rob's Liquor Vespucci
+    vector3(  1700.0,  4920.0,  42.0),  -- 24/7 Sandy Shores
+    vector3( 1961.0,  3741.0,  32.0),  -- LTD Grapeseed
+}
+
+-- ===== TV playlist names (used by FX_PlayerOnDemandCartoon) =====
+-- Standard GTA V TV channel playlist names. Random pick per effect run.
+local TV_PLAYLISTS = {
+    'PL_TV_STUDIO', 'PL_STD_W', 'PL_STD_CNT', 'PL_LO_CNT',
+    'PL_LO_W', 'PL_SP_STUDIO', 'PL_MP_STUDIO', 'PL_SP_CNT',
+    'PL_MP_CNT', 'PL_SP_W', 'PL_MP_W', 'PL_TNANAR',
+}
+
 -- sync_mode: META
 function FX_MetaSpawnMultipleEffects(alive)
-    TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 2)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 2)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 0)
 end
 
 -- sync_mode: META
 function FX_MetaEffectDuration05x(alive)
-    TriggerServerEvent("cc:meta_set_internal", "durationModifier", 0.5)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "durationModifier", 0.5)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "durationModifier", 1.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "durationModifier", 1.0)
 end
 
 -- sync_mode: META
 function FX_MetaEffectDuration2x(alive)
-    TriggerServerEvent("cc:meta_set_internal", "durationModifier", 2.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "durationModifier", 2.0)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "durationModifier", 1.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "durationModifier", 1.0)
 end
 
 -- sync_mode: META
 function FX_MetaHideChaosUi(alive)
-    TriggerServerEvent("cc:meta_set_internal", "hideChaosUI", true)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "hideChaosUI", true)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "hideChaosUI", false)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "hideChaosUI", false)
 end
 
 -- sync_mode: META
 function FX_MetaNochaos(alive)
-    TriggerServerEvent("cc:meta_set_internal", "disableChaos", true)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "disableChaos", true)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "disableChaos", false)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "disableChaos", false)
 end
 
 -- sync_mode: META
 function FX_MetaReInvoke(alive)
-    TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 1)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 1)
     Citizen.Wait(100)
-    TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 0)
 end
 
 -- sync_mode: META
 function FX_MetaTimerspeed05x(alive)
-    TriggerServerEvent("cc:meta_set_internal", "timerModifier", 0.5)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "timerModifier", 0.5)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "timerModifier", 1.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "timerModifier", 1.0)
 end
 
 -- sync_mode: META
 function FX_MetaTimerspeed2x(alive)
-    TriggerServerEvent("cc:meta_set_internal", "timerModifier", 2.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "timerModifier", 2.0)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "timerModifier", 1.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "timerModifier", 1.0)
 end
 
 -- sync_mode: META
 function FX_MetaTimerspeed5x(alive)
-    TriggerServerEvent("cc:meta_set_internal", "timerModifier", 5.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "timerModifier", 5.0)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "timerModifier", 1.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "timerModifier", 1.0)
 end
 
 -- sync_mode: META
 function FX_MetaVotingmodeMajority(alive)
-    TriggerServerEvent("cc:meta_set_internal", "votingMode", "majority")
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "votingMode", "majority")
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "votingMode", "none")
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "votingMode", "none")
 end
 
 -- sync_mode: META
 function FX_MetaVotingmodeAntimajority(alive)
-    TriggerServerEvent("cc:meta_set_internal", "votingMode", "antimajority")
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "votingMode", "antimajority")
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "votingMode", "none")
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "votingMode", "none")
 end
 
 -- sync_mode: VISUAL
@@ -1125,11 +1282,11 @@ end
 
 -- sync_mode: META
 function FX_Chaosmode(alive)
-    TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 3)
-    TriggerServerEvent("cc:meta_set_internal", "timerModifier", 3.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 3)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "timerModifier", 3.0)
     while alive() do Citizen.Wait(250) end
-    TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 0)
-    TriggerServerEvent("cc:meta_set_internal", "timerModifier", 1.0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "additionalEffects", 0)
+    -- server-applies-meta: TriggerServerEvent("cc:meta_set_internal", "timerModifier", 1.0)
 end
 
 -- sync_mode: GLOBAL_OWNED
@@ -4489,12 +4646,12 @@ end
 
 -- sync_mode: VISUAL
 function FX_PlayerZoomzoomCam(alive)
-    zoomCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    local zoomCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
     RenderScriptCams(true, true, 10, true, true)
 
     while alive() do
         local curTick = GetGameTimer()
-        camZoom = math.sin(curTick * camZoomRate) * zoomMultiplier + zoomMidpoint
+        local camZoom = math.sin(curTick * 0.0015) * 30.0 + 70.0
         SetCamActive(zoomCamera, true)
         local coord = GetGameplayCamCoord()
         local rot = GetGameplayCamRot(2)
@@ -4505,12 +4662,11 @@ function FX_PlayerZoomzoomCam(alive)
     SetCamActive(zoomCamera, false)
     RenderScriptCams(false, true, 700, true, true)
     DestroyCam(zoomCamera, true)
-    zoomCamera = 0
 end
 
 -- sync_mode: VISUAL
 function FX_PlayerBinoculars(alive)
-    fovCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    local fovCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
     RenderScriptCams(true, true, 700, true, true)
 
     while alive() do
@@ -4524,7 +4680,6 @@ function FX_PlayerBinoculars(alive)
     SetCamActive(fovCamera, false)
     RenderScriptCams(false, true, 700, true, true)
     DestroyCam(fovCamera, true)
-    fovCamera = 0
 end
 
 -- sync_mode: VISUAL
@@ -4548,7 +4703,7 @@ end
 
 -- sync_mode: VISUAL
 function FX_PlayerFlipCamera(alive)
-    flippedCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    local flippedCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
     RenderScriptCams(true, true, 700, true, true)
 
     while alive() do
@@ -4563,7 +4718,6 @@ function FX_PlayerFlipCamera(alive)
     SetCamActive(flippedCamera, false)
     RenderScriptCams(false, true, 700, true, true)
     DestroyCam(flippedCamera, true)
-    flippedCamera = 0
 end
 
 -- sync_mode: VISUAL
@@ -4650,7 +4804,7 @@ end
 
 -- sync_mode: VISUAL
 function FX_PlayerQuakeFov(alive)
-    fovCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    local fovCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
     RenderScriptCams(true, true, 700, true, true)
 
     while alive() do
@@ -4664,7 +4818,6 @@ function FX_PlayerQuakeFov(alive)
     SetCamActive(fovCamera, false)
     RenderScriptCams(false, true, 700, true, true)
     DestroyCam(fovCamera, true)
-    fovCamera = 0
 end
 
 -- sync_mode: VISUAL
@@ -6449,3 +6602,4 @@ function FX_WorldSnow(alive)
     end
     SetWeatherTypeNow("EXTRASUNNY")
 end
+

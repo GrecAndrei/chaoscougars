@@ -42,6 +42,29 @@ function State.AliveCount()
 end
 
 function State.Broadcast(event, ...)
+    -- Defensive: prevent a bug or future code path from passing a string-typed
+    -- event name (TriggerClientEvent will throw a confusing native error).
+    if type(event) ~= 'string' or event == '' then
+        print(('[CC] State.Broadcast refused non-string event=%s'):format(tostring(event)))
+        return
+    end
+    -- Cap the payload to roughly FiveM's per-event size limit (~64KB after
+    -- protocol overhead). FiveM will refuse oversized events with a generic
+    -- "ERR_NETWORK_MESSAGE_TOO_LARGE" and the player gets a desync.
+    local args = {...}
+    local size = #event
+    for i = 1, select('#', ...) do
+        local a = select(i, ...)
+        local t = type(a)
+        if t == 'string' then size = size + #a
+        elseif t == 'table' then size = size + 256
+        elseif t == 'number' or t == 'boolean' then size = size + 8
+        else size = size + 64 end
+    end
+    if size > 32768 then
+        print(('[CC] State.Broadcast refused oversized payload event=%s size=%d'):format(event, size))
+        return
+    end
     TriggerClientEvent(event, -1, ...)
 end
 
@@ -197,6 +220,37 @@ Citizen.CreateThread(function()
             State.CleanExpiredEffects()
         end
     end
+end)
+
+-- === RESOURCE LIFECYCLE ===
+
+-- Resource stop. Without this, in-flight meta effects (durationModifier,
+-- timerModifier, hideChaosUI, etc.) would leave State.meta permanently
+-- altered after a /restart fivemchaos, and the next mission would start
+-- with stale state (e.g., chaos disabled forever). Also resets phase to
+-- LOBBY so a future /restart doesn't leave the game stuck in WON/LOST.
+AddEventHandler('onResourceStop', function(name)
+    if name ~= GetCurrentResourceName() then return end
+    State.phase = Phase.LOBBY
+    State.meta = {
+        additionalEffects = 0,
+        durationModifier = 1.0,
+        timerModifier = 1.0,
+        votingMode = 'none',
+        disableChaos = false,
+        hideChaosUI = false,
+    }
+    State.activeEffectsList = {}
+    Chaos.active = false
+    Chaos.activeEffects = {}
+    Chaos.recentEffects = {}
+    Chaos.timer = 0
+    Director.active = false
+    Director.cougars = {}
+    -- Broadcast clear + despawn so any late straggling client cleans up.
+    State.Broadcast('cc:clear_effects')
+    State.Broadcast('cc:despawn_all_cougars')
+    State.Broadcast('cc:meta_ui', false)
 end)
 
 -- === MISSION LIFECYCLE ===

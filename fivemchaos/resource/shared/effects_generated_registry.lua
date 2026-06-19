@@ -1,15 +1,15 @@
 local generated = {
-    {id='meta_spawn_multiple_effects', name='Combo Time', fn='FX_MetaSpawnMultipleEffects', sync_mode=SyncMode.META, weight=10},
-    {id='meta_effect_duration_0_5x', name='0.5x Effect Duration', fn='FX_MetaEffectDuration05x', sync_mode=SyncMode.META, weight=10},
-    {id='meta_effect_duration_2x', name='2x Effect Duration', fn='FX_MetaEffectDuration2x', sync_mode=SyncMode.META, weight=10},
-    {id='meta_hide_chaos_ui', name="What's Happening??", fn='FX_MetaHideChaosUi', sync_mode=SyncMode.META, weight=10},
-    {id='meta_nochaos', name='No Chaos', fn='FX_MetaNochaos', sync_mode=SyncMode.META, weight=10},
+    {id='meta_spawn_multiple_effects', name='Combo Time', fn='FX_MetaSpawnMultipleEffects', sync_mode=SyncMode.META, weight=10, meta={{key='additionalEffects', on=2, off=0}}},
+    {id='meta_effect_duration_0_5x', name='0.5x Effect Duration', fn='FX_MetaEffectDuration05x', sync_mode=SyncMode.META, weight=10, meta={{key='durationModifier', on=0.5, off=1.0}}},
+    {id='meta_effect_duration_2x', name='2x Effect Duration', fn='FX_MetaEffectDuration2x', sync_mode=SyncMode.META, weight=10, meta={{key='durationModifier', on=2.0, off=1.0}}},
+    {id='meta_hide_chaos_ui', name="What's Happening??", fn='FX_MetaHideChaosUi', sync_mode=SyncMode.META, weight=10, meta={{key='hideChaosUI', on=true, off=false}}},
+    {id='meta_nochaos', name='No Chaos', fn='FX_MetaNochaos', sync_mode=SyncMode.META, weight=10, meta={{key='disableChaos', on=true, off=false}}},
     {id='meta_re_invoke', name='Re-Invoke Previous Effects', fn='FX_MetaReInvoke', sync_mode=SyncMode.META, weight=10, instant=true},
-    {id='meta_timerspeed_0_5x', name='0.5x Timer Speed', fn='FX_MetaTimerspeed05x', sync_mode=SyncMode.META, weight=10},
-    {id='meta_timerspeed_2x', name='2x Timer Speed', fn='FX_MetaTimerspeed2x', sync_mode=SyncMode.META, weight=10},
-    {id='meta_timerspeed_5x', name='5x Timer Speed', fn='FX_MetaTimerspeed5x', sync_mode=SyncMode.META, weight=5, short=true},
-    {id='meta_votingmode_majority', name='Majority Voting', fn='FX_MetaVotingmodeMajority', sync_mode=SyncMode.META, weight=10},
-    {id='meta_votingmode_antimajority', name='Minority Voting', fn='FX_MetaVotingmodeAntimajority', sync_mode=SyncMode.META, weight=10},
+    {id='meta_timerspeed_0_5x', name='0.5x Timer Speed', fn='FX_MetaTimerspeed05x', sync_mode=SyncMode.META, weight=10, meta={{key='timerModifier', on=0.5, off=1.0}}},
+    {id='meta_timerspeed_2x', name='2x Timer Speed', fn='FX_MetaTimerspeed2x', sync_mode=SyncMode.META, weight=10, meta={{key='timerModifier', on=2.0, off=1.0}}},
+    {id='meta_timerspeed_5x', name='5x Timer Speed', fn='FX_MetaTimerspeed5x', sync_mode=SyncMode.META, weight=5, short=true, meta={{key='timerModifier', on=5.0, off=1.0}}},
+    {id='meta_votingmode_majority', name='Majority Voting', fn='FX_MetaVotingmodeMajority', sync_mode=SyncMode.META, weight=10, meta={{key='votingMode', on='majority', off='none'}}},
+    {id='meta_votingmode_antimajority', name='Minority Voting', fn='FX_MetaVotingmodeAntimajority', sync_mode=SyncMode.META, weight=10, meta={{key='votingMode', on='antimajority', off='none'}}},
     {id='misc_airstrike', name='Airstrike Inbound', fn='FX_MiscAirstrike', sync_mode=SyncMode.VISUAL, weight=10},
     {id='world_blackhole', name='Black Hole', fn='FX_WorldBlackhole', sync_mode=SyncMode.GLOBAL_OWNED, weight=5, short=true},
     {id='world_blackout', name='Blackout', fn='FX_WorldBlackout', sync_mode=SyncMode.VISUAL, weight=10},
@@ -33,7 +33,7 @@ local generated = {
     {id='misc_randomgravity', name='Random Gravity', fn='FX_MiscRandomgravity', sync_mode=SyncMode.VISUAL, weight=5, short=true},
     {id='misc_highpitch', name='High Pitch', fn='FX_MiscHighpitch', sync_mode=SyncMode.VISUAL, weight=10},
     {id='player_arenawarstheme', name='Play Arena Wars Theme', fn='FX_PlayerArenawarstheme', sync_mode=SyncMode.VISUAL, weight=10},
-    {id='invertvelocity', name='Invert Current Velocity', fn='FX_Invertvelocity', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
+    {id='invertvelocity', name='Invert Current Velocity', fn='FX_MiscInvertvelocity', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
     {id='misc_jumpy_props', name='Jumpy Props', fn='FX_MiscJumpyProps', sync_mode=SyncMode.GLOBAL_OWNED, weight=10},
     {id='time_lag', name='Lag', fn='FX_TimeLag', sync_mode=SyncMode.VISUAL, weight=5, short=true},
     {id='misc_lowpitch', name='Low Pitch', fn='FX_MiscLowpitch', sync_mode=SyncMode.VISUAL, weight=10},
@@ -211,7 +211,7 @@ local generated = {
     {id='player_suicide', name='Suicide', fn='FX_PlayerSuicide', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
     {id='player_superrun', name='Super Run & Super Jump', fn='FX_PlayerSuperrun', sync_mode=SyncMode.LOCAL, weight=10},
     {id='tp_lsairport', name='Teleport To LS Airport', fn='FX_TpLsairport', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
-    {id='tp_mazebanktower', name='Teleport To Top Of Maze Bank Tower', fn='FX_TpMazebanktower', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
+    {id='tp_mazebanktower', name='Teleport To Top Of Maze Bank Tower', fn='FX_TpMazebank', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
     {id='tp_fortzancudo', name='Teleport To Fort Zancudo', fn='FX_TpFortzancudo', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
     {id='tp_mountchilliad', name='Teleport To Mount Chiliad', fn='FX_TpMountchilliad', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
     {id='tp_skyfall', name='Teleport To Heaven', fn='FX_TpSkyfall', sync_mode=SyncMode.LOCAL, weight=10, instant=true},
@@ -376,6 +376,10 @@ end
 
 -- Rebuild lookup after all effects are loaded
 Effects._byId = {}
+Effects._validFns = {}
+Effects._validSyncModes = {}
 for _, fx in ipairs(Effects.Pool) do
     Effects._byId[fx.id] = fx
+    if fx.fn then Effects._validFns[fx.fn] = true end
+    if fx.sync_mode then Effects._validSyncModes[fx.sync_mode] = true end
 end

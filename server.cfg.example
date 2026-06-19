@@ -1,0 +1,47 @@
+# Example server.cfg for chaoscougar
+# Copy this to your txData/server.cfg and edit values marked CHANGE_ME.
+
+sv_hostname "Chaoscougar Server"
+sv_maxclients 32
+
+# REQUIRED: your license key from https://keymaster.fivem.net/
+sv_licenseKey "CHANGE_ME_LICENSE_KEY"
+
+# Required base resources (FiveM default set)
+ensure mapmanager
+ensure chat
+ensure spawnmanager
+ensure hardcap
+ensure sessionmanager
+
+# Main chaos resource. Folder name on disk is arbitrary; fxmanifest.lua
+# declares the resource name as `cougars`. Place this file at:
+#   txData/resources/[local]/cougars/fxmanifest.lua
+ensure cougars
+
+# OPTIONAL: dev REPL. Provides HTTP /exec, /event, /client_event, /telemetry
+# behind an X-CC-Dev-Token header. DO NOT expose the HTTP port to the
+# public internet. Place at:
+#   txData/resources/[local]/cougars_repl/fxmanifest.lua
+# ensure cougars_repl
+
+# Dev token: long random string. Required only if cougars_repl is enabled.
+# Generate one with:  [guid]::NewGuid().Guid  (PowerShell)
+setr chaoscougar_dev_token "CHANGE_ME_LONG_RANDOM_STRING"
+
+# Admin ACEs. Grant chaoscougar.admin to your admins so they can use the
+# in-game admin panel (F5). Replace YOUR_LICENSE_HERE with a real license.
+add_ace group.admins chaoscougar.admin allow
+# add_principal identifier.license:YOUR_LICENSE_HERE group.admins
+
+# Dev ACE: required to fire cc:force_effect over the network (rarely needed;
+# most testing uses cc_effect in the server console directly).
+add_ace group.devs chaoscougar.dev allow
+# add_principal identifier.license:YOUR_LICENSE_HERE group.devs
+
+# Server console commands (run while FXServer is running):
+#   cc_start                  start a mission
+#   cc_stop                   end the current mission
+#   cc_effect <id>            fire one effect (e.g. cc_effect low_gravity)
+#   cc_effects                list all effect IDs
+#   cc_difficulty             show current difficulty / scaling

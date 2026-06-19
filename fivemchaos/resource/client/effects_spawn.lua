@@ -17,7 +17,6 @@ function FX_SpawnKillerClowns()
         RetargetSpawnedPed(p, 5000)
     end
     SetModelAsNoLongerNeeded(hash)
-    TriggerServerEvent('cc:spawn_load_inc')
 end
 
 function FX_SpawnJuggernaut()
@@ -35,7 +34,6 @@ function FX_SpawnJuggernaut()
     SetBlockingOfNonTemporaryEvents(p, true)
     SetModelAsNoLongerNeeded(hash)
     RetargetSpawnedPed(p, 4000)
-    TriggerServerEvent('cc:spawn_load_inc')
 end
 
 function FX_SpawnAngryJesus()
@@ -53,15 +51,26 @@ function FX_SpawnAngryJesus()
     SetPedAccuracy(p, 70)
     SetModelAsNoLongerNeeded(hash)
     RetargetSpawnedPed(p, 4000)
-    TriggerServerEvent('cc:spawn_load_inc')
 end
 
--- Retarget loop for spawned hostile peds
+-- Retarget loop for spawned hostile peds.
+-- Uses AIIsMine (global from ownership.lua) instead of OwnershipGuard.IsOwner
+-- so the AI reclaims control if the engine migrates ownership away from
+-- the spawning client.
+--
+-- Each call fires one cc:spawn_load_inc and one cc:spawn_load_dec (on death)
+-- so the executor load is balanced per-ped regardless of how many peds the
+-- caller spawned. Callers should NOT fire their own cc:spawn_load_inc.
 function RetargetSpawnedPed(ped, intervalMs)
     intervalMs = intervalMs or 5000
+    if not ped or not DoesEntityExist(ped) then
+        -- Spawn failed (e.g., helper returned nil). Don't inc/dec; balance is 0.
+        return
+    end
+    TriggerServerEvent('cc:spawn_load_inc')
     Citizen.CreateThread(function()
         while DoesEntityExist(ped) and not IsEntityDead(ped) do
-            if OwnershipGuard.IsOwner(ped) then
+            if AIIsMine(ped) then
                 local nearest = GetNearestPlayerPed(GetEntityCoords(ped))
                 if nearest and nearest ~= 0 then
                     TaskCombatPed(ped, nearest, 0, 16)
@@ -69,6 +78,8 @@ function RetargetSpawnedPed(ped, intervalMs)
             end
             Citizen.Wait(intervalMs)
         end
+        -- Delete the corpse so dead-ped bodies don't pile up.
+        if DoesEntityExist(ped) then DeleteEntity(ped) end
         TriggerServerEvent('cc:spawn_load_dec')
     end)
 end
@@ -96,7 +107,6 @@ function FX_SpawnAlien()
         RetargetSpawnedPed(p, 4000)
     end
     SetModelAsNoLongerNeeded(hash)
-    TriggerServerEvent('cc:spawn_load_inc')
 end
 
 function FX_SpawnBigfoot()
@@ -119,7 +129,6 @@ function FX_SpawnBigfoot()
         RetargetSpawnedPed(p, 4000)
     end
     SetModelAsNoLongerNeeded(hash)
-    TriggerServerEvent('cc:spawn_load_inc')
 end
 
 function FX_SpawnZombieHorde()
@@ -144,5 +153,4 @@ function FX_SpawnZombieHorde()
         end
     end
     SetModelAsNoLongerNeeded(hash)
-    TriggerServerEvent('cc:spawn_load_inc')
 end

@@ -215,7 +215,7 @@ function Effects.GetRandom(usedRecently, activeIds)
     end
 
     if #candidates == 0 then
-        return Effects.Pool[math.random(#Effects.Pool)]
+        return nil
     end
     return candidates[math.random(#candidates)]
 end

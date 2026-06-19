@@ -15,14 +15,20 @@ Citizen.CreateThread(function()
     Citizen.Wait(500)
 
     local ped = PlayerPedId()
-    NetworkResurrectLocalPlayer(Config.Start.x, Config.Start.y, Config.Start.z, 270.0, true, false)
-    SetEntityCoords(ped, Config.Start.x, Config.Start.y, Config.Start.z, false, false, false, false)
-    SetEntityVisible(ped, true, false)
-    SetEntityHealth(ped, 200)
-    ClearPedTasksImmediately(ped)
-    FreezeEntityPosition(ped, false)
+    -- Only do the hard LSIA respawn if we're not already in a mission.
+    -- Without this gate, a player connecting mid-mission would be teleported
+    -- to the start position before the late-join sync arrives, fighting the
+    -- mission-start teleport (and the player's actual position would be lost).
+    if MyState.phase == Phase.LOBBY then
+        NetworkResurrectLocalPlayer(Config.Start.x, Config.Start.y, Config.Start.z, 270.0, true, false)
+        SetEntityCoords(ped, Config.Start.x, Config.Start.y, Config.Start.z, false, false, false, false)
+        SetEntityVisible(ped, true, false)
+        SetEntityHealth(ped, 200)
+        ClearPedTasksImmediately(ped)
+        FreezeEntityPosition(ped, false)
 
-    DoScreenFadeIn(500)
+        DoScreenFadeIn(500)
+    end
     TriggerServerEvent('cc:join')
 end)
 
@@ -145,5 +151,35 @@ Citizen.CreateThread(function()
         if (MyState.phase == Phase.RUNNING or MyState.phase == Phase.PAUSED) and IsControlJustPressed(0, 56) then
             TriggerServerEvent('cc:vote_pause')
         end
+    end
+end)
+
+-- Owner-transfer safety net. AIIsMine re-requests control of an entity
+-- when the engine hands ownership to a different player (e.g. after a
+-- cougar strays far from its original spawning client, or the spawning
+-- client disconnects). Network ownership can flip mid-game; this loop
+-- scans for any nearby cougars whose owner we used to be but lost, and
+-- re-requests control. Runs every 2s; cheap.
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(2000)
+        if MyState.phase == Phase.RUNNING then
+            local myPed = PlayerPedId()
+            if not myPed or not DoesEntityExist(myPed) then goto continue end
+            local myPos = GetEntityCoords(myPed)
+            for _, ped in ipairs(GetGamePool('CPed')) do
+                if ped ~= myPed and not IsEntityDead(ped) and NetworkGetEntityIsNetworked(ped) then
+                    local entPos = GetEntityCoords(ped)
+                    if #(myPos - entPos) < 300.0 then
+                        if NetworkGetEntityOwner(ped) ~= PlayerId() then
+                            if not NetworkHasControlOfEntity(ped) then
+                                NetworkRequestControlOfEntity(ped)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        ::continue::
     end
 end)

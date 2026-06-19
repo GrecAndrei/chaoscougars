@@ -1,5 +1,29 @@
+-- __COUGAR_OWNER_LOCK_PATCH__
+-- All cougar entities are claimed by the TARGET client for the lifetime of
+-- the spawn. AI/effect threads gate on AIIsMine(ent) which uses
+-- NetworkHasControlOfEntity + (when needed) NetworkRequestControlOfEntity +
+-- a 1s wait, so even mid-game migration is recovered from.
+--
+-- AIIsMine is defined as a global in client/ownership.lua so it can be
+-- shared with client/effects_spawn.lua (RetargetSpawnedPed) and any other
+-- script that drives cougar / spawned-ped AI.
 local activeCougars = {}
-local COUGAR_MODEL = `a_c_panther`
+local COUGAR_MODEL = `a_c_mtlion`
+
+-- =====================================================================
+-- OWNERSHIP HELPERS
+-- =====================================================================
+
+-- Run by whichever client the server says is the AI driver. Locks the
+-- network id to that client and stops migration.
+local function ClaimOwner(ent)
+    if not DoesEntityExist(ent) then return end
+    local netId = ObjToNet(ent)
+    if netId and netId ~= 0 then
+        SetNetworkIdCanMigrate(netId, false)
+    end
+    SetEntityAsMissionEntity(ent, true, true)
+end
 
 -- =====================================================================
 -- UTILITIES
@@ -16,9 +40,12 @@ local function LoadModel(hash)
 end
 
 local function FindGround(x, y, z)
+    -- Try descending offsets; use the first one that returns a real hit
+    -- (the `found` boolean, not the z value, is the ground-truth signal —
+    --  z=0 is a valid sea-level result and must NOT be filtered out).
     for _, offset in ipairs({100.0, 50.0, 20.0, 0.0}) do
         local found, groundZ = GetGroundZFor_3dCoord(x, y, z + offset, false)
-        if found and groundZ > 0.0 then return groundZ + 1.0 end
+        if found then return groundZ + 1.0 end
     end
     return z
 end
@@ -27,7 +54,7 @@ local function RetargetLoop(ped, intervalMs)
     intervalMs = intervalMs or 3000
     Citizen.CreateThread(function()
         while DoesEntityExist(ped) and not IsEntityDead(ped) do
-            if OwnershipGuard.IsOwner(ped) then
+            if AIIsMine(ped) then
                 local nearest = GetNearestPlayerPed(GetEntityCoords(ped))
                 if nearest and nearest ~= 0 then
                     ClearPedTasks(ped)
@@ -47,12 +74,15 @@ local function SpawnHostileCougar(pos)
     local cougar = CreatePed(28, COUGAR_MODEL, pos.x, pos.y, z, math.random(0, 360) + 0.0, true, true)
     if not DoesEntityExist(cougar) then return nil end
 
+    ClaimOwner(cougar)
+
     -- Disable ALL flee behavior
     SetPedFleeAttributes(cougar, 0, false)
     SetPedConfigFlag(cougar, 292, true)   -- disable flee from armed ped
     SetPedConfigFlag(cougar, 2, false)    -- not a wimp
     SetPedConfigFlag(cougar, 281, true)   -- disable writhe
     SetBlockingOfNonTemporaryEvents(cougar, true)
+    SetPedAsEnemy(cougar, true)
 
     -- Max aggression
     SetPedCombatAttributes(cougar, 46, true)  -- always fight
@@ -86,21 +116,31 @@ local function RegisterCougar(netId, entities, cougarType, pos)
     TriggerServerEvent('cc:spawn_load_inc')
 end
 
+-- Unified cleanup path. Called by:
+--   - the per-type spawner thread when it detects the cougar is dead
+--   - the cc:despawn_cougar handler (server-initiated despawn)
+--   - the cc:despawn_all_cougars handler (mission end)
+-- Claims `activeCougars[netId]` first so only one path fires the events
+-- even if both race. The 3-second corpse delay has been removed: the engine
+-- plays the death animation independently of entity existence.
 local function Cleanup(netId)
     local data = activeCougars[netId]
     if not data then return end
-    Citizen.Wait(3000)
+    activeCougars[netId] = nil
     for _, ent in ipairs(data.entities) do
         if DoesEntityExist(ent) then DeleteEntity(ent) end
     end
-    activeCougars[netId] = nil
     TriggerServerEvent('cc:cougar_dead', netId)
     TriggerServerEvent('cc:spawn_load_dec')
 end
 
 -- =====================================================================
--- FENCE: reverses velocity on hit, scales with speed
+-- Per-type spawners. Every variant takes `pos` and (optionally) returns
+-- the primary entity for ownership claiming. AI/effect threads gate on
+-- AIIsMine(ent) so they only fire from the canonical owner.
 -- =====================================================================
+
+-- FENCE: reverses velocity on hit, scales with speed
 local function SpawnFence(pos)
     local cougar = SpawnHostileCougar(pos)
     if not cougar then return end
@@ -110,6 +150,7 @@ local function SpawnFence(pos)
     Citizen.CreateThread(function()
         while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
             Citizen.Wait(50)
+            if not AIIsMine(cougar) then goto next end
             for _, ped in ipairs(GetAllPlayerPeds()) do
                 local veh = GetVehiclePedIsIn(ped, false)
                 if veh ~= 0 and #(GetEntityCoords(cougar) - GetEntityCoords(veh)) < 3.5 then
@@ -125,14 +166,13 @@ local function SpawnFence(pos)
                     break
                 end
             end
+            ::next::
         end
         Cleanup(netId)
     end)
 end
 
--- =====================================================================
 -- CAR: AI driver rams player, honks aggressively
--- =====================================================================
 local function SpawnCar(pos)
     local vehHash = `buffalo`
     local driverHash = `s_m_y_cop_01`
@@ -143,8 +183,10 @@ local function SpawnCar(pos)
     SetVehicleOnGroundProperly(vehicle)
     ModifyVehicleTopSpeed(vehicle, 30.0)
     SetVehicleColours(vehicle, 0, 0) -- black
+    ClaimOwner(vehicle)
 
     local driver = CreatePedInsideVehicle(vehicle, 26, driverHash, -1, true, true)
+    ClaimOwner(driver)
     SetEntityVisible(driver, false, false)
 
     local cougar = CreatePed(28, COUGAR_MODEL, pos.x, pos.y, z, 0.0, true, true)
@@ -165,7 +207,7 @@ local function SpawnCar(pos)
     Citizen.CreateThread(function()
         local hornTimer = 0
         while DoesEntityExist(vehicle) and IsVehicleDriveable(vehicle, false) do
-            if OwnershipGuard.IsOwner(driver) then
+            if AIIsMine(driver) then
                 local target = GetNearestPlayerPed(GetEntityCoords(vehicle))
                 if target then
                     TaskVehicleChase(driver, target)
@@ -183,17 +225,14 @@ local function SpawnCar(pos)
     end)
 end
 
--- =====================================================================
 -- SHOOTER: ranged cougar - periodically damages nearby players
--- (animals can't hold weapons, so we simulate ranged spit attacks)
--- =====================================================================
 local function SpawnShooter(pos)
     local cougar = SpawnHostileCougar(pos)
     if not cougar then return end
 
     SetEntityHealth(cougar, 400)
     SetPedArmour(cougar, 100)
-    SetEntityMaxSpeed(cougar, 7.0) -- slower, keeps distance
+    SetEntityMaxSpeed(cougar, 7.0)
 
     local netId = NetworkGetNetworkIdFromEntity(cougar)
     RegisterCougar(netId, {cougar}, 'shooter', pos)
@@ -201,26 +240,23 @@ local function SpawnShooter(pos)
     Citizen.CreateThread(function()
         while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
             Citizen.Wait(2000)
-            if not OwnershipGuard.IsOwner(cougar) then goto next end
+            if not AIIsMine(cougar) then goto next end
 
             local cpos = GetEntityCoords(cougar)
             for _, ped in ipairs(GetAllPlayerPeds()) do
                 local ppos = GetEntityCoords(ped)
                 local dist = #(cpos - ppos)
                 if dist > 8.0 and dist < 45.0 then
-                    -- Projectile visual
                     RequestNamedPtfxAsset('core')
                     if HasNamedPtfxAssetLoaded('core') then
                         UseParticleFxAsset('core')
                         StartParticleFxNonLoopedAtCoord('ent_sht_flame', cpos.x, cpos.y, cpos.z + 0.5, 0.0, 0.0, 0.0, 0.6, false, false, false)
                     end
                     Citizen.Wait(300)
-                    -- Damage the player
                     local veh = GetVehiclePedIsIn(ped, false)
                     if veh ~= 0 and OwnershipGuard.IsOwner(veh) then
-                        ApplyForceToEntity(veh, 1, 0.0, 0.0, 2.5, math.random(-2,2)+0.0, 0.0, 0.0, 0, true, true, true, false, true)
+                        ApplyForceToEntity(veh, 1, 0.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0, true, true, true, false, true)
                     end
-                    break
                 end
             end
             ::next::
@@ -229,9 +265,7 @@ local function SpawnShooter(pos)
     end)
 end
 
--- =====================================================================
--- JESUS: holy cougar - AOE fire trail + knockback aura
--- =====================================================================
+-- JESUS: invincible jesus ped mounted on a tanky cougar with knockback aura
 local function SpawnJesus(pos)
     local cougar = SpawnHostileCougar(pos)
     if not cougar then return end
@@ -244,6 +278,7 @@ local function SpawnJesus(pos)
     if LoadModel(jesusHash) then
         local z = FindGround(pos.x, pos.y, pos.z)
         local jesus = CreatePed(26, jesusHash, pos.x, pos.y, z, 0.0, true, true)
+        ClaimOwner(jesus)
         AttachEntityToEntity(jesus, cougar, 0, 0.0, -0.1, 0.7, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
         SetEntityInvincible(jesus, true)
         SetModelAsNoLongerNeeded(jesusHash)
@@ -257,16 +292,15 @@ local function SpawnJesus(pos)
         local lastFireDrop = 0
         while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
             Citizen.Wait(100)
+            if not AIIsMine(cougar) then goto next end
             local cpos = GetEntityCoords(cougar)
 
-            -- Fire trail every 2s
             local now = GetGameTimer()
-            if now - lastFireDrop > 2000 and OwnershipGuard.IsOwner(cougar) then
+            if now - lastFireDrop > 2000 then
                 StartScriptFire(cpos.x, cpos.y, cpos.z, 3, false)
                 lastFireDrop = now
             end
 
-            -- Knockback aura: push vehicles away within 12m
             for _, ped in ipairs(GetAllPlayerPeds()) do
                 local veh = GetVehiclePedIsIn(ped, false)
                 if veh ~= 0 and OwnershipGuard.IsOwner(veh) then
@@ -280,14 +314,13 @@ local function SpawnJesus(pos)
                     end
                 end
             end
+            ::next::
         end
         Cleanup(netId)
     end)
 end
 
--- =====================================================================
 -- BALL: physics launcher (blue=straight up, purple=directional yeet)
--- =====================================================================
 local function SpawnBall(pos, color)
     local cougar = SpawnHostileCougar(pos)
     if not cougar then return end
@@ -295,6 +328,7 @@ local function SpawnBall(pos, color)
     local ballHash = color == 'blue' and `prop_beach_ball_01` or `prop_beach_ball_02`
     LoadModel(ballHash)
     local ball = CreateObject(ballHash, pos.x, pos.y, pos.z + 1.0, true, true, false)
+    ClaimOwner(ball)
     AttachEntityToEntity(ball, cougar, 0, 0.0, 0.0, 0.4, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
     SetModelAsNoLongerNeeded(ballHash)
 
@@ -304,6 +338,11 @@ local function SpawnBall(pos, color)
     Citizen.CreateThread(function()
         while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
             Citizen.Wait(50)
+            -- Gate on BOTH cougar and ball ownership. ClaimOwner calls
+            -- SetNetworkIdCanMigrate(false) for both, so this is normally
+            -- instant, but if a migration ever slips through we want both
+            -- entities to be ours before issuing physics effects.
+            if not (AIIsMine(cougar) and AIIsMine(ball)) then goto next end
             for _, ped in ipairs(GetAllPlayerPeds()) do
                 local veh = GetVehiclePedIsIn(ped, false)
                 if veh ~= 0 and #(GetEntityCoords(cougar) - GetEntityCoords(veh)) < 4.0 then
@@ -322,14 +361,13 @@ local function SpawnBall(pos, color)
                     break
                 end
             end
+            ::next::
         end
         Cleanup(netId)
     end)
 end
 
--- =====================================================================
--- SWARM: coordinated pack of 5 - they surround and converge
--- =====================================================================
+-- SWARM: coordinated pack of 5
 local function SpawnSwarm(pos)
     local entities = {}
     local count = 5
@@ -349,7 +387,6 @@ local function SpawnSwarm(pos)
     local netId = NetworkGetNetworkIdFromEntity(entities[1])
     RegisterCougar(netId, entities, 'swarm', pos)
 
-    -- Coordinated flanking: every few seconds they reposition to surround target
     Citizen.CreateThread(function()
         while true do
             local alive = {}
@@ -360,11 +397,16 @@ local function SpawnSwarm(pos)
             end
             if #alive == 0 then break end
 
-            if OwnershipGuard.IsOwner(alive[1]) then
-                local target = GetNearestPlayerPed(GetEntityCoords(alive[1]))
-                if target and target ~= 0 then
-                    local tpos = GetEntityCoords(target)
-                    for i, c in ipairs(alive) do
+            -- Per-cougar ownership gate. If a single cougar's ownership
+            -- has migrated, only skip task assignment for THAT cougar; the
+            -- rest still get their flanking/combat tasks. This avoids the
+            -- single-point-of-failure where one migration froze the whole
+            -- swarm.
+            local target = GetNearestPlayerPed(GetEntityCoords(alive[1]))
+            if target and target ~= 0 then
+                local tpos = GetEntityCoords(target)
+                for i, c in ipairs(alive) do
+                    if AIIsMine(c) then
                         local angle = (i / #alive) * math.pi * 2
                         local flankPos = tpos + vector3(math.cos(angle) * 8.0, math.sin(angle) * 8.0, 0)
                         TaskGoToCoordAnyMeans(c, flankPos.x, flankPos.y, flankPos.z, 3.0, 0, false, 786603, 0.0)
@@ -379,9 +421,7 @@ local function SpawnSwarm(pos)
     end)
 end
 
--- =====================================================================
--- BOMBER: suicide runner, explodes when in range. Beeps as warning.
--- =====================================================================
+-- BOMBER: suicide runner, explodes when in range
 local function SpawnBomber(pos)
     local cougar = SpawnHostileCougar(pos)
     if not cougar then return end
@@ -402,6 +442,7 @@ local function SpawnBomber(pos)
         local lastBeep = 0
         while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
             Citizen.Wait(50)
+            if not AIIsMine(cougar) then goto next end
             local cpos = GetEntityCoords(cougar)
             local closestDist = 999.0
 
@@ -413,7 +454,6 @@ local function SpawnBomber(pos)
                 end
             end
 
-            -- Beep faster as it gets closer
             if closestDist < 30.0 then
                 beepRate = math.max(100, math.floor(closestDist / 30.0 * 800))
                 local now = GetGameTimer()
@@ -430,15 +470,14 @@ local function SpawnBomber(pos)
                 SendNUIMessage({type = 'hit', variant = 'BOOM!'})
                 break
             end
+            ::next::
         end
         StopParticleFxLooped(ptfx, false)
         Cleanup(netId)
     end)
 end
 
--- =====================================================================
--- PHANTOM: invisible stalker, flickers when close, instant-kills on touch
--- =====================================================================
+-- PHANTOM: invisible stalker
 local function SpawnPhantom(pos)
     local cougar = SpawnHostileCougar(pos)
     if not cougar then return end
@@ -452,6 +491,7 @@ local function SpawnPhantom(pos)
     Citizen.CreateThread(function()
         while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
             Citizen.Wait(80)
+            if not AIIsMine(cougar) then goto next end
             local cpos = GetEntityCoords(cougar)
             local closestDist = 999.0
             local closestVeh = 0
@@ -466,18 +506,15 @@ local function SpawnPhantom(pos)
                 end
             end
 
-            -- Visibility: flickers in 20m, solid in 8m
             if closestDist < 8.0 then
                 SetEntityAlpha(cougar, 220, false)
             elseif closestDist < 20.0 then
-                -- Flicker
                 local flicker = math.random() > 0.7 and 120 or 0
                 SetEntityAlpha(cougar, flicker, false)
             else
                 SetEntityAlpha(cougar, 0, false)
             end
 
-            -- Strike: vehicle gets launched + spun
             if closestDist < 3.0 and closestVeh ~= 0 then
                 if OwnershipGuard.IsOwner(closestVeh) then
                     local spin = math.random() > 0.5 and 15.0 or -15.0
@@ -488,21 +525,19 @@ local function SpawnPhantom(pos)
                 PlaySoundFrontend(-1, 'CHARACTERS_ACTIVE', 'HUD_AWARDS', false)
                 SetEntityHealth(cougar, 0)
             end
+            ::next::
         end
         Cleanup(netId)
     end)
 end
 
--- =====================================================================
--- STUN: EMP cougar - freezes vehicle + disables engine temporarily
--- =====================================================================
+-- STUN: EMP cougar
 local function SpawnStun(pos)
     local cougar = SpawnHostileCougar(pos)
     if not cougar then return end
     SetEntityMaxSpeed(cougar, 11.0)
     SetEntityHealth(cougar, 250)
 
-    -- Blue tint to signal electric type
     RequestNamedPtfxAsset('core')
     while not HasNamedPtfxAssetLoaded('core') do Citizen.Wait(10) end
     UseParticleFxAsset('core')
@@ -514,6 +549,7 @@ local function SpawnStun(pos)
     Citizen.CreateThread(function()
         while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
             Citizen.Wait(50)
+            if not AIIsMine(cougar) then goto next end
             for _, ped in ipairs(GetAllPlayerPeds()) do
                 local veh = GetVehiclePedIsIn(ped, false)
                 if veh ~= 0 and #(GetEntityCoords(cougar) - GetEntityCoords(veh)) < 4.0 then
@@ -523,7 +559,6 @@ local function SpawnStun(pos)
                         SetVehicleUndriveable(veh, true)
                         ShakeGameplayCam('SMALL_EXPLOSION_SHAKE', 1.5)
 
-                        -- EMP burst visual
                         local vpos = GetEntityCoords(veh)
                         if HasNamedPtfxAssetLoaded('core') then
                             UseParticleFxAsset('core')
@@ -543,21 +578,20 @@ local function SpawnStun(pos)
                     break
                 end
             end
+            ::next::
         end
         StopParticleFxLooped(ptfx, false)
         Cleanup(netId)
     end)
 end
 
--- =====================================================================
--- MAGNETIC: gravity well - pulls vehicles in with increasing force
--- =====================================================================
+-- MAGNETIC: gravity well
 local function SpawnMagnetic(pos)
     local cougar = SpawnHostileCougar(pos)
     if not cougar then return end
     SetEntityHealth(cougar, 600)
     SetPedArmour(cougar, 200)
-    SetEntityMaxSpeed(cougar, 5.0) -- slow, acts like a turret
+    SetEntityMaxSpeed(cougar, 5.0)
 
     RequestNamedPtfxAsset('core')
     while not HasNamedPtfxAssetLoaded('core') do Citizen.Wait(10) end
@@ -569,7 +603,8 @@ local function SpawnMagnetic(pos)
 
     Citizen.CreateThread(function()
         while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
-            Citizen.Wait(100) -- 100ms not 50ms, halved force application rate
+            Citizen.Wait(100)
+            if not AIIsMine(cougar) then goto next end
             local cpos = GetEntityCoords(cougar)
             for _, ped in ipairs(GetAllPlayerPeds()) do
                 local veh = GetVehiclePedIsIn(ped, false)
@@ -577,7 +612,6 @@ local function SpawnMagnetic(pos)
                     local vpos = GetEntityCoords(veh)
                     local dist = #(vpos - cpos)
                     if dist < 40.0 and dist > 3.0 then
-                        -- Quadratic falloff so it's gentle at range, strong up close
                         local t = 1.0 - (dist / 40.0)
                         local strength = t * t * 2.0
                         local dir = cpos - vpos
@@ -586,18 +620,19 @@ local function SpawnMagnetic(pos)
                     end
                 end
             end
+            ::next::
         end
         StopParticleFxLooped(ptfx, false)
         Cleanup(netId)
     end)
 end
 
--- =====================================================================
--- SPLITTER: splits into 2 on death, up to generation 3 (max 7 total)
--- =====================================================================
+-- SPLITTER
+-- Each gen cougar is registered in activeCougars individually, so:
+--   - each gets its own balanced inc (RegisterCougar) and dec (Cleanup)
+--   - Director.cougars tracks all 7 cougars, so CountCougars() is accurate
+--   - the gen-1 cougar's death triggers gen-2 spawns in the per-type thread
 local function SpawnSplitter(pos)
-    local allEntities = {}
-
     local function SpawnGen(genPos, generation)
         local cougar = SpawnHostileCougar(genPos)
         if not cougar then return end
@@ -606,21 +641,20 @@ local function SpawnSplitter(pos)
         SetEntityHealth(cougar, hp)
         SetEntityMaxSpeed(cougar, 7.0 + generation * 3.0)
 
-        allEntities[#allEntities + 1] = cougar
-
-        if generation == 1 then
-            local netId = NetworkGetNetworkIdFromEntity(cougar)
-            RegisterCougar(netId, allEntities, 'splitter', genPos)
-        end
+        -- Register this cougar individually so the server can count it
+        -- toward the spawn cap and so the inc/dec pair is balanced.
+        local netId = NetworkGetNetworkIdFromEntity(cougar)
+        RegisterCougar(netId, {cougar}, 'splitter', genPos)
 
         Citizen.CreateThread(function()
             while DoesEntityExist(cougar) and not IsEntityDead(cougar) do
                 Citizen.Wait(500)
             end
 
-            if generation < 3 and DoesEntityExist(cougar) then
+            -- Death path: spawn children, then clean up. Cleanup fires
+            -- cc:cougar_dead and cc:spawn_load_dec.
+            if generation < 3 and DoesEntityExist(cougar) and AIIsMine(cougar) then
                 local deathPos = GetEntityCoords(cougar)
-                -- Visual: small explosion on split
                 AddExplosion(deathPos.x, deathPos.y, deathPos.z, 41, 0.5, true, false, 0.3)
                 Citizen.Wait(400)
                 for i = 1, 2 do
@@ -629,6 +663,7 @@ local function SpawnSplitter(pos)
                     SpawnGen(deathPos + offset, generation + 1)
                 end
             end
+            Cleanup(netId)
         end)
     end
 
@@ -638,41 +673,43 @@ end
 -- =====================================================================
 -- DISPATCH
 -- =====================================================================
+
 local Spawners = {
-    fence = SpawnFence,
-    car = SpawnCar,
-    shooter = SpawnShooter,
-    jesus = SpawnJesus,
-    ball_blue = function(pos) SpawnBall(pos, 'blue') end,
+    fence       = SpawnFence,
+    car         = SpawnCar,
+    shooter     = SpawnShooter,
+    jesus       = SpawnJesus,
+    ball_blue   = function(pos) SpawnBall(pos, 'blue') end,
     ball_purple = function(pos) SpawnBall(pos, 'purple') end,
-    swarm = SpawnSwarm,
-    bomber = SpawnBomber,
-    phantom = SpawnPhantom,
-    stun = SpawnStun,
-    magnetic = SpawnMagnetic,
-    splitter = SpawnSplitter,
+    swarm       = SpawnSwarm,
+    bomber      = SpawnBomber,
+    phantom     = SpawnPhantom,
+    stun        = SpawnStun,
+    magnetic    = SpawnMagnetic,
+    splitter    = SpawnSplitter,
 }
 
-RegisterNetEvent('cc:spawn_cougar', function(cougarType, pos)
+RegisterNetEvent('cc:spawn_cougar', function(cougarType, pos, targetPlayerId)
     local spawner = Spawners[cougarType] or SpawnFence
+    local myServerId = GetPlayerServerId(PlayerId())
+    -- Server tells us which client is the AI driver. The entity itself was
+    -- created networked and syncs to every client; the AI thread is what we
+    -- want to keep singular.
+    if targetPlayerId and targetPlayerId ~= -1 and targetPlayerId ~= myServerId then
+        return -- observer; entity is already networked from the owner client
+    end
     spawner(pos)
 end)
 
 RegisterNetEvent('cc:despawn_cougar', function(netId)
-    local data = activeCougars[netId]
-    if data then
-        for _, ent in ipairs(data.entities) do
-            if DoesEntityExist(ent) then DeleteEntity(ent) end
-        end
-        activeCougars[netId] = nil
-    end
+    Cleanup(netId)
 end)
 
 RegisterNetEvent('cc:despawn_all_cougars', function()
-    for _, data in pairs(activeCougars) do
-        for _, ent in ipairs(data.entities) do
-            if DoesEntityExist(ent) then DeleteEntity(ent) end
-        end
+    -- Snapshot keys because Cleanup mutates activeCougars
+    local keys = {}
+    for netId in pairs(activeCougars) do keys[#keys + 1] = netId end
+    for _, netId in ipairs(keys) do
+        Cleanup(netId)
     end
-    activeCougars = {}
 end)

@@ -116,7 +116,13 @@ local function DirectorLoop()
             local cougarType = PickCougarType()
             Director.lastSpawn = now
 
-            TriggerClientEvent('cc:spawn_cougar', target.id, cougarType, pos)
+            -- Broadcast to ALL clients: the target client becomes the owner of
+            -- the cougar's network id, and the rest just render/observe it.
+            -- Sending only to target.id lets FiveM migrate ownership to the
+            -- host, which means the spawning client never sees IsOwner()==true
+            -- and every owner-gated AI/effect branch never runs -> the cougar
+            -- just stands there doing nothing.
+            TriggerClientEvent('cc:spawn_cougar', -1, cougarType, pos, target.id)
 
             ::skip::
         end
@@ -138,6 +144,7 @@ local function CleanupLoop()
                 if tooFar then
                     State.Broadcast('cc:despawn_cougar', netId)
                     Director.cougars[netId] = nil
+                    State.Broadcast('cc:cougar_count', CountCougars())
                 end
             end
         end
@@ -167,4 +174,27 @@ AddEventHandler('cc:director_stop', function()
     Director.active = false
     State.Broadcast('cc:despawn_all_cougars', true)
     Director.cougars = {}
+end)
+
+-- When a player drops, immediately despawn any cougars that were targeting
+-- them so the world doesn't accumulate orphan cougars. Without this, a
+-- disconnecting player leaves their cougar fleet on the map for the rest
+-- of the round (CleanupLoop only despawns on distance, but the cougar is
+-- right where the player was).
+AddEventHandler('playerDropped', function()
+    if not Director.active then return end
+    local src = source
+    local playerPos = State.players[src] and State.players[src].pos
+    if not playerPos then return end
+    local removed = 0
+    for netId, cougar in pairs(Director.cougars) do
+        if cougar.pos and #(cougar.pos - playerPos) < Config.SpawnLateral * 2 then
+            State.Broadcast('cc:despawn_cougar', netId)
+            Director.cougars[netId] = nil
+            removed = removed + 1
+        end
+    end
+    if removed > 0 then
+        State.Broadcast('cc:cougar_count', CountCougars())
+    end
 end)

@@ -50,12 +50,13 @@ RegisterNUICallback('panel_action', function(data, cb)
 end)
 
 RegisterNUICallback('panel_effect', function(data, cb)
-    if data.id then
-        TriggerServerEvent('cc:admin_effect', data.id)
+    local id = data and data.id
+    if type(id) ~= 'string' then cb({}); return end
+    id = id:match('^%s*(.-)%s*$') or ''
+    if id == '' or #id > 64 or id:find('[%c\x00-\x1f\x7f]') then
+        cb({})
+        return
     end
-    cb({})
-end)
-
-RegisterNUICallback('ready', function(_, cb)
+    TriggerServerEvent('cc:admin_effect', id)
     cb({})
 end)

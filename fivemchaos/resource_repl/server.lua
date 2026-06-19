@@ -97,6 +97,12 @@ RegisterNetEvent('cc:cougar_dead', function(netId)
 end)
 
 -- HTTP Handler
+--
+-- SECURITY: every endpoint that can affect the game or execute code is
+-- gated on the `chaoscougar.dev` ACE. Read-only endpoints (/status,
+-- /players, /log) are un-gated so anyone with the RCON port can inspect
+-- game state for debugging. Without this gate the server exposes a full
+-- Lua RCE via POST /exec and a ServerEvent injection via POST /event.
 SetHttpHandler(function(req, res)
     local path = req.path
     local method = req.method
@@ -110,6 +116,24 @@ SetHttpHandler(function(req, res)
     if method == 'OPTIONS' then
         res.send('')
         return
+    end
+
+    local function deny(reason)
+        res.send(json.encode({ok = false, error = reason or 'forbidden'}))
+    end
+
+    -- Returns true if the request was authenticated as a dev operator.
+    -- Devs pass `X-CC-Dev-Token: <token>` header, OR the request originated
+    -- from the server console (curl localhost:30120 by the host machine).
+    -- The token is read from the `chaoscougar_dev_token` ConVar, which must
+    -- be set in server.cfg before starting the resource. If the convar is
+    -- unset, the REPL is fully locked down.
+    local function isDev()
+        local token = req.headers and req.headers['x-cc-dev-token']
+        if type(token) ~= 'string' or token == '' then return false end
+        local expected = GetConvar('chaoscougar_dev_token', '')
+        if expected == '' then return false end
+        return token == expected
     end
 
     -- GET /status
@@ -149,8 +173,9 @@ SetHttpHandler(function(req, res)
         return
     end
 
-    -- POST /exec
+    -- POST /exec  (DEV ONLY)
     if path == '/exec' and method == 'POST' then
+        if not isDev() then deny('dev token required'); return end
         local body = req.body or ''
         if body == '' then
             res.send(json.encode({ok = false, error = 'empty body'}))
@@ -166,8 +191,9 @@ SetHttpHandler(function(req, res)
         return
     end
 
-    -- POST /client_exec
+    -- POST /client_exec  (DEV ONLY)
     if path == '/client_exec' and method == 'POST' then
+        if not isDev() then deny('dev token required'); return end
         local data = json.decode(req.body or '{}')
         if not data.code then
             res.send(json.encode({ok = false, error = 'missing code field'}))
@@ -180,7 +206,6 @@ SetHttpHandler(function(req, res)
         TriggerClientEvent('cc_repl:exec', target, requestId, data.code)
         AddLog('repl', 'client_exec[' .. tostring(target) .. ']: ' .. data.code:sub(1, 80))
 
-        -- Wait up to 5s for response
         local responded = false
         local resultData = nil
 
@@ -196,21 +221,18 @@ SetHttpHandler(function(req, res)
             end
             if not responded then
                 clientWaiters[requestId] = nil
-                -- Can't send response after timeout in this model
             end
         end)
 
-        -- For HTTP we can't easily async-wait, so we do a polling approach
-        -- Actually FiveM HTTP handlers are sync, so let's just fire-and-forget
-        -- and have the client result go to /log
         res.send(json.encode({ok = true, result = 'dispatched to client ' .. tostring(target), requestId = requestId}))
         return
     end
 
-    -- POST /event
+    -- POST /event  (DEV ONLY)
     if path == '/event' and method == 'POST' then
+        if not isDev() then deny('dev token required'); return end
         local data = json.decode(req.body or '{}')
-        if not data.name then
+        if not data.name or type(data.name) ~= 'string' then
             res.send(json.encode({ok = false, error = 'missing event name'}))
             return
         end
@@ -222,10 +244,11 @@ SetHttpHandler(function(req, res)
         return
     end
 
-    -- POST /client_event
+    -- POST /client_event  (DEV ONLY)
     if path == '/client_event' and method == 'POST' then
+        if not isDev() then deny('dev token required'); return end
         local data = json.decode(req.body or '{}')
-        if not data.name then
+        if not data.name or type(data.name) ~= 'string' then
             res.send(json.encode({ok = false, error = 'missing event name'}))
             return
         end
@@ -240,6 +263,7 @@ SetHttpHandler(function(req, res)
 
     -- GET /telemetry
     if path == '/telemetry' and method == 'GET' then
+        if not isDev() then deny('dev token required'); return end
         res.send(json.encode(telemetry))
         return
     end
@@ -255,8 +279,15 @@ RegisterNetEvent('cc_repl:telemetry', function(data)
     telemetry[source].time = os.time()
 end)
 
--- Force-trigger an effect by ID (for testing from CLI)
+-- Force-trigger an effect by ID (for testing from CLI). Gated on dev ACE.
 RegisterNetEvent('cc:force_effect', function(effectId)
+    if type(source) ~= 'number' or source < 1 then return end
+    if not IsPlayerAceAllowed(source, 'chaoscougar.dev') then
+        print(('[CC-REPL] Blocked cc:force_effect from player %d (%s)'):format(
+            source, GetPlayerName(source) or '?'))
+        return
+    end
+    if type(effectId) ~= 'string' or effectId == '' then return end
     if not Effects then
         AddLog('repl', 'Effects table not available (main resource not running?)')
         return

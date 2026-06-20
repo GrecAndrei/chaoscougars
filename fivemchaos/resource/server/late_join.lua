@@ -6,18 +6,26 @@ AddEventHandler('cc:player_joined_running', function(src)
 
     for _, entry in ipairs(State.activeEffectsList) do
         if entry.expiresAt > now then
-            local remaining = entry.expiresAt - now
+            -- Skip META effects: their state is already applied server-side
+            -- via State.meta (which is sent below). Re-dispatching them on
+            -- the client just runs a no-op META body, which is harmless but
+            -- wastes a thread slot and creates a phantom HUD timer card.
+            if entry.sync_mode == SyncMode.META then goto continue end
+            -- Skip SPAWN_SINGLE effects targeted at a different player; the
+            -- executor is the only client who should run the body, and the
+            -- late joiner isn't it.
             if entry.sync_mode ~= SyncMode.SPAWN_SINGLE or entry.executorId == src then
                 snapshot[#snapshot + 1] = {
                     id = entry.id,
                     fn = entry.fn,
                     name = entry.name,
                     sync_mode = entry.sync_mode,
-                    remainingDuration = remaining,
+                    remainingDuration = entry.expiresAt - now,
                     seed = entry.seed,
                 }
             end
         end
+        ::continue::
     end
 
     -- Build a snapshot of active cougars so the late-joiner gets the right

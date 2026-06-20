@@ -119,53 +119,11 @@ RegisterNetEvent('cc:late_join_sync', function(snapshot, difficulty, meta, couga
     end
 end)
 
-RegisterNetEvent('cc:clear_effects', function()
-    for _, cancel in pairs(activeTimers) do cancel() end
-    activeTimers = {}
-
-    ClearTimecycleModifier()
-    SetTimeScale(1.0)
-    SetRunSprintMultiplierForPlayer(PlayerId(), 1.0)
-    SetNightvision(false)
-    SetSeethrough(false)
-    SetGravityLevel(0)
-    RenderScriptCams(false, false, 0, true, true)
-    StopGameplayCamShaking(true)
-    ClearWeatherTypePersist()
-    SetArtificialLightsState(false)
-
-    local ped = PlayerPedId()
-    SetEntityInvincible(ped, false)
-    SetEntityMaxHealth(ped, 200)
-    ResetPedMovementClipset(ped, 0.0)
-
-    local veh = GetVehiclePedIsIn(ped, false)
-    if veh ~= 0 then
-        SetVehicleEnginePowerMultiplier(veh, 1.0)
-        SetVehicleReduceGrip(veh, false)
-        SetEntityInvincible(veh, false)
-    end
-
-    SendNUIMessage({type = 'effects_cleared'})
-end)
-
--- Resource stop. Without this, every active FX_* effect's exit-cleanup
--- code (e.g., ClearTimecycleModifier, SetGravityLevel(0), SetEntityMaxHealth
--- restore, etc.) is skipped when the Citizen thread is killed. The result
--- is a permanently-degraded client: stuck gravity level, max-health 1,
--- invincible vehicle, weather persist, cam locked, etc. Wire the same
--- reset that cc:clear_effects does.
-AddEventHandler('onResourceStop', function(name)
-    if name ~= GetCurrentResourceName() then return end
-
-    -- Cancel every active effect's `running` flag so its while-loop exits
-    -- and its own cleanup block runs. We can't wait for them synchronously,
-    -- so we also fire the same one-shot reset that cc:clear_effects does.
-    for _, entry in pairs(activeTimers) do
-        if entry and entry.cancel then entry.cancel() end
-    end
-    activeTimers = {}
-
+-- Hard reset of every "sticky" client state that FX_* effects modify.
+-- Called by both cc:clear_effects (mission stop) and onResourceStop
+-- (resource restart) so the client is never left with stuck gravity,
+-- invisible vehicle, invincible ped, locked camera, etc.
+local function HardResetClientState()
     ClearTimecycleModifier()
     SetTimeScale(1.0)
     SetRunSprintMultiplierForPlayer(PlayerId(), 1.0)
@@ -185,19 +143,46 @@ AddEventHandler('onResourceStop', function(name)
         ResetPedMovementClipset(ped, 0.0)
         SetPedIsDrunk(ped, false)
         SetAmbientVoiceName(ped, GetHashKey('A_M_Y_ACULT_01_WHITE_FULL_01'))
-        SetSuperJumpThisFrame(PlayerId())
     end
 
-    local veh = GetVehiclePedIsIn(ped, false)
+    local veh = ped and GetVehiclePedIsIn(ped, false) or 0
     if veh ~= 0 and DoesEntityExist(veh) then
         SetVehicleEnginePowerMultiplier(veh, 1.0)
         SetVehicleReduceGrip(veh, false)
         SetEntityInvincible(veh, false)
         SetEntityProofs(veh, false, false, false, false, false, false, false, false)
         ResetEntityAlpha(veh)
+        SetVehicleEngineOn(veh, true, false, true)
     end
+end
 
-    -- Tell the HUD UI to reset its hide flag and any other state.
+RegisterNetEvent('cc:clear_effects', function()
+    for _, entry in pairs(activeTimers) do
+        if entry and entry.cancel then entry.cancel() end
+    end
+    activeTimers = {}
+
+    HardResetClientState()
+    SendNUIMessage({type = 'effects_cleared'})
+end)
+
+-- Resource stop. Without this, every active FX_* effect's exit-cleanup
+-- code (e.g., ClearTimecycleModifier, SetGravityLevel(0), SetEntityMaxHealth
+-- restore, etc.) is skipped when the Citizen thread is killed. The result
+-- is a permanently-degraded client: stuck gravity level, max-health 1,
+-- invincible vehicle, weather persist, cam locked, etc.
+AddEventHandler('onResourceStop', function(name)
+    if name ~= GetCurrentResourceName() then return end
+
+    -- Cancel every active effect's `running` flag so its while-loop exits
+    -- and its own cleanup block runs. We can't wait for them synchronously,
+    -- so we also fire the same one-shot reset that cc:clear_effects does.
+    for _, entry in pairs(activeTimers) do
+        if entry and entry.cancel then entry.cancel() end
+    end
+    activeTimers = {}
+
+    HardResetClientState()
     SendNUIMessage({type = 'effects_cleared'})
     SendNUIMessage({type = 'meta_ui', hidden = false})
 end)

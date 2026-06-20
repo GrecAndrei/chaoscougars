@@ -144,6 +144,9 @@ end
 
 RegisterNetEvent('cc:join', function()
     local src = source
+    if type(src) ~= 'number' or src < 1 then return end
+    if not GetPlayerName(src) then return end
+    if State.players[src] then return end -- already joined, ignore duplicate
     State.players[src] = {
         name = GetPlayerName(src),
         alive = true,
@@ -422,6 +425,24 @@ local function ValidateConfig()
     if not vecOk('Finish') then
         bad = bad + 1
         print('[CC] Config.Finish is not a valid vector3')
+    end
+    -- Validate BannedClasses is a table of {classNumber = true} entries where
+    -- classNumber is in [0, 22] (FiveM has 22 vehicle classes, 0-22).
+    if type(Config.BannedClasses) ~= 'table' then
+        bad = bad + 1
+        print('[CC] Config.BannedClasses is not a table - using defaults (14,15,16)')
+        Config.BannedClasses = {[14]=true, [15]=true, [16]=true}
+    else
+        local rebuilt = {}
+        for k, v in pairs(Config.BannedClasses) do
+            if type(k) == 'number' and k >= 0 and k <= 22 and v == true then
+                rebuilt[k] = true
+            else
+                bad = bad + 1
+                print(('[CC] Config.BannedClasses[%s]=%s invalid - dropping'):format(tostring(k), tostring(v)))
+            end
+        end
+        Config.BannedClasses = rebuilt
     end
     if vecOk('Start') and vecOk('Finish') and #(Config.Start - Config.Finish) < 100 then
         bad = bad + 1

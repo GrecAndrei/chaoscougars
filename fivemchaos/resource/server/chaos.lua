@@ -20,20 +20,19 @@ local metaResetGens = {}
 --
 -- Per-entry validation: a corrupt or future-modified registry entry could
 -- have a non-string key or nil on/off values, which would wipe State.meta.
--- We re-route every entry through the same setMeta() the meta_set handlers
--- use, so type-validation and clamping are applied uniformly.
+-- We re-route every entry through State.setMeta (defined in security.lua)
+-- which type-validates, clamps, and broadcasts hideChaosUI updates.
 local function ApplyMetaChange(fx, on)
     if not fx.meta then return end
     if type(fx.meta) ~= 'table' then return end
     for _, m in ipairs(fx.meta) do
         if type(m) == 'table' and type(m.key) == 'string' then
             local value = on and m.on or m.off
-            -- setMeta is the security.lua helper; if it's not loaded yet
-            -- (e.g., shared script ordering issue), fall back to direct
-            -- assignment with a minimal clamp to avoid wiping the field.
-            if setMeta then
-                setMeta(m.key, value, 'meta_apply')
+            if State.setMeta then
+                State.setMeta(m.key, value, 'meta_apply')
             else
+                -- Fallback if security.lua hasn't loaded yet (shouldn't
+                -- happen given fxmanifest load order, but defense in depth).
                 State.meta[m.key] = value
                 if m.key == 'hideChaosUI' then
                     State.Broadcast('cc:meta_ui', State.meta.hideChaosUI and true or false)

@@ -72,6 +72,9 @@ function FX_Forcefield(alive)
                 local force = (15.0 - dist) / 15.0 * 100.0
                 local dir = epos - pos
                 dir = dir / #dir
+                -- Gate SetPedToRagdoll: calling it every frame re-triggers
+                -- the ragdoll animation and pins the ped in place. Without
+                -- the gate, every owned ped within 15m gets stuck.
                 if not IsPedRagdoll(entity) then
                     SetPedToRagdoll(entity, 3000, 3000, 0, true, true, false)
                 end
@@ -429,6 +432,9 @@ function FX_LavaGround(alive)
     local fires = {}
     while alive() do
         local pos = GetEntityCoords(PlayerPedId())
+        -- Cap the live-fire pool. Without a cap, every 500ms adds 3 fires
+        -- for the effect's full duration; a 45s effect leaks 270 fires.
+        -- StopScriptFired on the oldest entries when we exceed the cap.
         for i = 1, 3 do
             local x = pos.x + math.random(-30, 30)
             local y = pos.y + math.random(-30, 30)
@@ -436,6 +442,19 @@ function FX_LavaGround(alive)
             if found then
                 fires[#fires + 1] = StartScriptFire(x, y, groundZ, 25, false)
             end
+        end
+        -- Prune fires that have burned out (StopScriptFire on a dead handle
+        -- is a no-op) and trim oldest entries if pool grows past 30.
+        local alive_fires = {}
+        for _, handle in ipairs(fires) do
+            if handle and DoesEntityExist(handle) then
+                alive_fires[#alive_fires + 1] = handle
+            end
+        end
+        fires = alive_fires
+        while #fires > 30 do
+            RemoveScriptFire(fires[1])
+            table.remove(fires, 1)
         end
         Citizen.Wait(500)
     end

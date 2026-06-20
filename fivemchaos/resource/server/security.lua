@@ -19,16 +19,17 @@ local function isAdmin(src)
     return IsPlayerAceAllowed(src, 'chaoscougar.admin') == true
 end
 
-local function setMeta(key, value, who)
+-- Public setMeta attached to State so other server scripts (chaos.lua's
+-- ApplyMetaChange in particular) can apply type-validated meta updates
+-- without re-implementing the type table. Without exposing this, META
+-- effects would silently fail to apply state changes because the local
+-- function in security.lua is invisible to chaos.lua.
+function State.setMeta(key, value, who)
     if type(key) ~= 'string' or key == '' then return false end
     if not CC_META_ALLOWED[key] then
-        print(('[CC] [%s] Refused unknown meta key=%s'):format(who, tostring(key)))
+        print(('[CC] [%s] Refused unknown meta key=%s'):format(who or 'setMeta', tostring(key)))
         return false
     end
-    -- Type-validate each known meta key. Without this a malicious admin could
-    -- set `additionalEffects = 1e9` (int overflow in burst loop), or
-    -- `durationModifier = -1` (negative duration), or `hideChaosUI = "yes"`
-    -- (truthy string vs boolean).
     if key == 'additionalEffects' then
         if type(value) ~= 'number' then return false end
         value = math.floor(value)
@@ -38,7 +39,7 @@ local function setMeta(key, value, who)
         if value < 0.1 or value > 10 then value = math.max(0.1, math.min(10, value)) end
     elseif key == 'votingMode' then
         if type(value) ~= 'string' then return false end
-        if value ~= 'none' and value ~= 'pause' and value ~= 'chaos' then return false end
+        if value ~= 'none' and value ~= 'pause' and value ~= 'chaos' and value ~= 'majority' and value ~= 'antimajority' then return false end
     elseif key == 'disableChaos' or key == 'hideChaosUI' then
         value = (value and value ~= false and value ~= 0) and true or false
     end
@@ -56,7 +57,7 @@ RegisterNetEvent('cc:meta_set', function(key, value)
             src, GetPlayerName(src) or '?', tostring(key), tostring(value)))
         return
     end
-    setMeta(key, value, 'meta_set')
+    State.setMeta(key, value, 'meta_set')
 end)
 
 RegisterNetEvent('cc:meta_set_internal', function(key, value)
@@ -70,5 +71,5 @@ RegisterNetEvent('cc:meta_set_internal', function(key, value)
             src, GetPlayerName(src) or '?', tostring(key), tostring(value)))
         return
     end
-    setMeta(key, value, 'meta_set_internal')
+    State.setMeta(key, value, 'meta_set_internal')
 end)

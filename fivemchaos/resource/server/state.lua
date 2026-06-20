@@ -196,6 +196,7 @@ end)
 
 RegisterNetEvent('cc:respawned', function()
     local src = source
+    if type(src) ~= 'number' or src < 1 then return end
     if State.players[src] then
         State.players[src].alive = true
         State.players[src].pos = Config.Start
@@ -204,6 +205,7 @@ end)
 
 RegisterNetEvent('cc:reached_finish', function()
     local src = source
+    if type(src) ~= 'number' or src < 1 then return end
     if State.phase == Phase.RUNNING then
         local name = State.players[src] and State.players[src].name or 'Unknown'
         EndMission('WON', name .. ' reached Paleto Bay')
@@ -212,11 +214,14 @@ end)
 
 RegisterNetEvent('cc:spawn_load_inc', function()
     local src = source
+    if type(src) ~= 'number' or src < 1 then return end
+    if not State.players[src] then return end
     State.spawnLoad[src] = (State.spawnLoad[src] or 0) + 1
 end)
 
 RegisterNetEvent('cc:spawn_load_dec', function()
     local src = source
+    if type(src) ~= 'number' or src < 1 then return end
     State.spawnLoad[src] = math.max(0, (State.spawnLoad[src] or 1) - 1)
 end)
 
@@ -301,6 +306,7 @@ end
 
 function EndMission(result, detail)
     if State.phase ~= Phase.RUNNING and State.phase ~= Phase.PAUSED then return end
+    local previousPhase = State.phase
     State.phase = result
     local elapsed = os.time() - State.startTime
 
@@ -318,11 +324,17 @@ function EndMission(result, detail)
     State.activeEffectsList = {}
 
     SetTimeout(12000, function()
-        State.phase = Phase.LOBBY
-        for _, p in pairs(State.players) do
-            p.alive = true
+        -- Guard against the timeout firing AFTER a fresh mission was
+        -- started (which would race-reset State.phase from RUNNING back
+        -- to LOBBY mid-run). Only transition to LOBBY if the phase is
+        -- still our own result.
+        if State.phase ~= previousPhase and (State.phase == result) then
+            State.phase = Phase.LOBBY
+            for _, p in pairs(State.players) do
+                p.alive = true
+            end
+            State.Broadcast('cc:state', Phase.LOBBY, 0)
         end
-        State.Broadcast('cc:state', Phase.LOBBY, 0)
     end)
 end
 
@@ -356,3 +368,73 @@ RegisterCommand('cc_difficulty', function(src, args)
         State.difficulty, State.GetChaosInterval(), State.GetMaxCougars(), State.GetSpawnCooldown()
     ))
 end, false)
+
+-- === CONFIG VALIDATION ===
+
+-- Validate required Config values on resource start. Without this, a
+-- typo (e.g. PauseTreshold instead of PauseThreshold) silently disables
+-- the vote-to-pause feature. We log a single warning per bad key and
+-- substitute a safe default so the resource still runs.
+local function ValidateConfig()
+    if type(Config) ~= 'table' then
+        print('[CC] FATAL: Config table missing. Resource will not function.')
+        return
+    end
+    local checks = {
+        {key = 'MinPlayers',         v = Config.MinPlayers,         t = 'number', lo = 1, hi = 64,  def = 1},
+        {key = 'MinSurvivors',       v = Config.MinSurvivors,       t = 'number', lo = 1, hi = 32,  def = 1},
+        {key = 'PauseThreshold',     v = Config.PauseThreshold,     t = 'number', lo = 1, hi = 64,  def = 1},
+        {key = 'VoteWindowSec',      v = Config.VoteWindowSec,      t = 'number', lo = 1, hi = 120, def = 30},
+        {key = 'EffectDuration',     v = Config.EffectDuration,     t = 'number', lo = 1, hi = 600, def = 30},
+        {key = 'ShortDuration',      v = Config.ShortDuration,      t = 'number', lo = 1, hi = 60,  def = 10},
+        {key = 'ChaosIntervalBase',  v = Config.ChaosIntervalBase,  t = 'number', lo = 1, hi = 600, def = 30},
+        {key = 'ChaosIntervalMin',   v = Config.ChaosIntervalMin,   t = 'number', lo = 1, hi = 600, def = 10},
+        {key = 'MaxCougarsBase',     v = Config.MaxCougarsBase,     t = 'number', lo = 1, hi = 100, def = 6},
+        {key = 'MaxCougarsMax',      v = Config.MaxCougarsMax,      t = 'number', lo = 1, hi = 100, def = 30},
+        {key = 'SpawnCooldownBase',  v = Config.SpawnCooldownBase,  t = 'number', lo = 1, hi = 300, def = 30},
+        {key = 'SpawnCooldownMin',   v = Config.SpawnCooldownMin,   t = 'number', lo = 1, hi = 300, def = 8},
+        {key = 'SpawnAheadBase',     v = Config.SpawnAheadBase,     t = 'number', lo = 1, hi = 2000, def = 250},
+        {key = 'SpawnAheadMin',      v = Config.SpawnAheadMin,      t = 'number', lo = 1, hi = 2000, def = 80},
+        {key = 'SpawnLateral',       v = Config.SpawnLateral,       t = 'number', lo = 0, hi = 500, def = 25},
+        {key = 'CougarDespawnDist',  v = Config.CougarDespawnDist,  t = 'number', lo = 50, hi = 5000, def = 600},
+        {key = 'DifficultyExponent', v = Config.DifficultyExponent, t = 'number', lo = 0.1, hi = 5, def = 1.0},
+        {key = 'WinRadius',          v = Config.WinRadius,          t = 'number', lo = 1, hi = 500, def = 50},
+    }
+    local bad = 0
+    for _, c in ipairs(checks) do
+        local ok = type(c.v) == c.t and c.v >= c.lo and c.v <= c.hi
+        if not ok then
+            bad = bad + 1
+            print(('[CC] Config.%s invalid (got %s, expected %s in [%g, %g]) - using default %g'):format(
+                c.key, tostring(c.v), c.t, c.lo, c.hi, c.def))
+            Config[c.key] = c.def
+        end
+    end
+    -- Also validate vector3 Start/Finish positions
+    local function vecOk(name)
+        local v = Config[name]
+        return type(v) == 'table' and type(v.x) == 'number' and type(v.y) == 'number' and type(v.z) == 'number'
+    end
+    if not vecOk('Start') then
+        bad = bad + 1
+        print('[CC] Config.Start is not a valid vector3')
+    end
+    if not vecOk('Finish') then
+        bad = bad + 1
+        print('[CC] Config.Finish is not a valid vector3')
+    end
+    if vecOk('Start') and vecOk('Finish') and #(Config.Start - Config.Finish) < 100 then
+        bad = bad + 1
+        print('[CC] Config.Start and Config.Finish are too close (<100m)')
+    end
+    if bad > 0 then
+        print(('[CC] Config validation: %d issue(s). Using safe defaults where needed.'):format(bad))
+    else
+        print('[CC] Config validated OK.')
+    end
+end
+
+AddEventHandler('onResourceStart', function(name)
+    if name ~= GetCurrentResourceName() then return end
+    ValidateConfig()
+end)

@@ -118,12 +118,15 @@ RegisterCommand('cc_test_cougars', function(src)
 
     -- Track spawned confirmations
     local spawned = {}
+    -- The handler reference is used for RemoveEventHandler at the end so
+    -- repeated /cc_test_cougars invocations don't accumulate listeners.
     local handler = AddEventHandler('cc_test:cougar_spawned_ack', function(cougarType)
         spawned[cougarType] = true
     end)
 
-    -- Listen for the main resource's cougar_spawned event
-    local netHandler = RegisterNetEvent('cc:cougar_spawned')
+    -- Listen for the main resource's cougar_spawned event.
+    -- (RegisterNetEvent is wrong here — that's for declaring events the
+    -- client can trigger. To LISTEN server-side use AddEventHandler.)
     local cougarHandler = AddEventHandler('cc:cougar_spawned', function(netId, cougarType, pos)
         TriggerEvent('cc_test:cougar_spawned_ack', cougarType)
     end)
@@ -161,9 +164,6 @@ RegisterCommand('cc_test_cougars', function(src)
         Log('=== COUGARS TEST COMPLETE ===')
     end)
 end, false)
-
---------------------------------------------------------------------------------
--- 3. /cc_test_ownership
 -- Spawns 10 vehicles, verifies only owner modifies each.
 --------------------------------------------------------------------------------
 RegisterCommand('cc_test_ownership', function(src)
@@ -181,7 +181,6 @@ RegisterCommand('cc_test_ownership', function(src)
     local reports = 0
     local expected = 10
 
-    local handler = RegisterNetEvent('cc_test:ownership_report')
     local evtHandler = AddEventHandler('cc_test:ownership_report', function(vehicleNetId, ownerSrc, modifierSrc, isConflict)
         reports = reports + 1
         if isConflict then
@@ -253,9 +252,7 @@ RegisterCommand('cc_test_latejoin', function(src)
         local gotSync = false
         local syncCount = 0
 
-        local evtHandler
-        RegisterNetEvent('cc_test:latejoin_ack')
-        evtHandler = AddEventHandler('cc_test:latejoin_ack', function(count)
+        local evtHandler = AddEventHandler('cc_test:latejoin_ack', function(count)
             gotSync = true
             syncCount = count
         end)
@@ -307,9 +304,7 @@ RegisterCommand('cc_test_director', function(src)
     local spawnLog = {}
     local typeCounts = {}
 
-    local evtHandler
-    RegisterNetEvent('cc:cougar_spawned')
-    evtHandler = AddEventHandler('cc:cougar_spawned', function(netId, cougarType, pos)
+    local evtHandler = AddEventHandler('cc:cougar_spawned', function(netId, cougarType, pos)
         spawnLog[#spawnLog + 1] = {type = cougarType, time = os.time()}
         typeCounts[cougarType] = (typeCounts[cougarType] or 0) + 1
         Log('  Director spawned: ' .. cougarType .. ' (total: ' .. #spawnLog .. ')')

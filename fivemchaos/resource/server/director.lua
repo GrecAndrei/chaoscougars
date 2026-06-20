@@ -163,11 +163,15 @@ local function CleanupLoop()
 end
 
 RegisterNetEvent('cc:cougar_spawned', function(netId, cougarType, pos)
+    if type(netId) ~= 'number' or netId <= 0 then return end
+    if type(cougarType) ~= 'string' or cougarType == '' then return end
     Director.cougars[netId] = {type = cougarType, spawnTime = os.time(), pos = pos}
     State.Broadcast('cc:cougar_count', CountCougars())
 end)
 
 RegisterNetEvent('cc:cougar_dead', function(netId)
+    if type(netId) ~= 'number' or netId <= 0 then return end
+    if not Director.cougars[netId] then return end
     Director.cougars[netId] = nil
     State.Broadcast('cc:cougar_count', CountCougars())
 end)

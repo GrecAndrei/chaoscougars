@@ -21,7 +21,12 @@ end
 -- the engine and add load). Without this, every AI tick (50ms loop) calls
 -- NetworkRequestControlOfEntity on entities we never owned -> spurious
 -- network traffic and possible control-flip flapping.
-local lastControlAttempt = {}
+--
+-- Weak-keyed table: when an entity is deleted by the engine, its userdata
+-- becomes invalid and is GC'd. Without __mode='k', the entry would pin the
+-- userdata and leak memory across a long session (swarm + splitter
+-- missions can cycle hundreds of cougars).
+local lastControlAttempt = setmetatable({}, {__mode = 'k'})
 local CONTROL_RETRY_MS = 200
 
 function AIIsMine(ent)

@@ -33,8 +33,24 @@ RegisterNetEvent('cc:trigger_effect', function(id, name, fnName, instant, durati
         local cancel = function() running = false end
         activeTimers[id] = {gen = gen, cancel = cancel}
 
+        -- alive() returns false when either (a) the duration timer fired or
+        -- (b) the player is dead. Most `while alive() do ... end` loops
+        -- assume the player is alive and skip death detection; without this
+        -- a 30-second effect continues running on the corpse until the
+        -- duration SetTimeout fires, leaving the world in a weird state
+        -- (gravity flipped, time slowed, weather stuck).
+        local function alive()
+            if not running then return false end
+            local ped = PlayerPedId()
+            if not ped or not DoesEntityExist(ped) or IsEntityDead(ped) then
+                running = false
+                return false
+            end
+            return true
+        end
+
         Citizen.CreateThread(function()
-            fn(function() return running end, seed)
+            fn(alive, seed)
             if activeTimers[id] and activeTimers[id].gen == gen then
                 activeTimers[id] = nil
             end
@@ -61,10 +77,21 @@ RegisterNetEvent('cc:late_join_sync', function(snapshot, difficulty, meta, couga
             SendNUIMessage({type = 'effect', id = entry.id, name = entry.name or entry.id, duration = remaining})
 
             local running = true
-            activeTimers[entry.id] = {gen = 1, cancel = function() running = false end}
+            local cancel = function() running = false end
+            activeTimers[entry.id] = {gen = 1, cancel = cancel}
+
+            local function alive()
+                if not running then return false end
+                local ped = PlayerPedId()
+                if not ped or not DoesEntityExist(ped) or IsEntityDead(ped) then
+                    running = false
+                    return false
+                end
+                return true
+            end
 
             Citizen.CreateThread(function()
-                fn(function() return running end, entry.seed)
+                fn(alive, entry.seed)
                 if activeTimers[entry.id] and activeTimers[entry.id].gen == 1 then
                     activeTimers[entry.id] = nil
                 end

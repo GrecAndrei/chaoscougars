@@ -108,14 +108,14 @@ Effects.Pool = {
     {id='never_wanted',      name='Never Wanted',            fn='FX_NeverWanted',        sync_mode=SyncMode.LOCAL, short=true},
 
     -- === META ===
-    {id='meta_spawn_multiple',  name='Combo Time',            fn='FX_MetaSpawnMultiple',   sync_mode=SyncMode.META},
-    {id='meta_duration_05x',    name='0.5x Duration',         fn='FX_MetaDuration05x',     sync_mode=SyncMode.META},
-    {id='meta_duration_2x',     name='2x Duration',           fn='FX_MetaDuration2x',      sync_mode=SyncMode.META},
-    {id='meta_timer_05x',       name='0.5x Timer Speed',      fn='FX_MetaTimerspeed05x',   sync_mode=SyncMode.META},
-    {id='meta_timer_2x',        name='2x Timer Speed',        fn='FX_MetaTimerspeed2x',    sync_mode=SyncMode.META},
-    {id='meta_timer_5x',        name='5x Timer Speed',        fn='FX_MetaTimerspeed5x',    sync_mode=SyncMode.META},
-    {id='meta_no_chaos',        name='No Chaos',              fn='FX_MetaNoChaos',         sync_mode=SyncMode.META, short=true},
-    {id='meta_hide_ui',         name='Hide Chaos UI',         fn='FX_MetaHideUI',          sync_mode=SyncMode.META},
+    {id='meta_spawn_multiple',  name='Combo Time',            fn='FX_MetaSpawnMultiple',   sync_mode=SyncMode.META, meta={{key='additionalEffects', on=2, off=0}}},
+    {id='meta_duration_05x',    name='0.5x Duration',         fn='FX_MetaDuration05x',     sync_mode=SyncMode.META, meta={{key='durationModifier', on=0.5, off=1.0}}},
+    {id='meta_duration_2x',     name='2x Duration',           fn='FX_MetaDuration2x',      sync_mode=SyncMode.META, meta={{key='durationModifier', on=2.0, off=1.0}}},
+    {id='meta_timer_05x',       name='0.5x Timer Speed',      fn='FX_MetaTimerspeed05x',   sync_mode=SyncMode.META, meta={{key='timerModifier', on=0.5, off=1.0}}},
+    {id='meta_timer_2x',        name='2x Timer Speed',        fn='FX_MetaTimerspeed2x',    sync_mode=SyncMode.META, meta={{key='timerModifier', on=2.0, off=1.0}}},
+    {id='meta_timer_5x',        name='5x Timer Speed',        fn='FX_MetaTimerspeed5x',    sync_mode=SyncMode.META, meta={{key='timerModifier', on=5.0, off=1.0}}},
+    {id='meta_no_chaos',        name='No Chaos',              fn='FX_MetaNoChaos',         sync_mode=SyncMode.META, short=true, meta={{key='disableChaos', on=true, off=false}}},
+    {id='meta_hide_ui',         name='Hide Chaos UI',         fn='FX_MetaHideUI',          sync_mode=SyncMode.META, meta={{key='hideChaosUI', on=true, off=false}}},
 
     -- === NEW: VEHICLE LOCAL ===
     {id='auto_drive',        name='Auto Drive',                fn='FX_AutoDrive',        sync_mode=SyncMode.LOCAL, short=true},
@@ -181,9 +181,9 @@ Effects.Pool = {
     {id='spawn_zombie_horde',name='Spawn Zombie Horde',        fn='FX_SpawnZombieHorde', sync_mode=SyncMode.SPAWN_SINGLE, instant=true},
 
     -- === NEW: META ===
-    {id='meta_super_chaos',     name='Super Chaos',            fn='FX_MetaSuperChaos',     sync_mode=SyncMode.META, short=true},
-    {id='meta_extreme_duration',name='3x Duration',            fn='FX_MetaExtremeDuration',sync_mode=SyncMode.META, short=true},
-    {id='meta_chaos_ramp',      name='Chaos Ramp',             fn='FX_MetaChaosRamp',      sync_mode=SyncMode.META},
+    {id='meta_super_chaos',     name='Super Chaos',            fn='FX_MetaSuperChaos',     sync_mode=SyncMode.META, short=true, meta={{key='additionalEffects', on=3, off=0}}},
+    {id='meta_extreme_duration',name='3x Duration',            fn='FX_MetaExtremeDuration',sync_mode=SyncMode.META, short=true, meta={{key='durationModifier', on=3.0, off=1.0}}},
+    {id='meta_chaos_ramp',      name='Chaos Ramp',             fn='FX_MetaChaosRamp',      sync_mode=SyncMode.META, meta={{key='additionalEffects', on=1, off=0},{key='timerModifier', on=0.5, off=1.0}}},
 }
 
 -- Build lookup

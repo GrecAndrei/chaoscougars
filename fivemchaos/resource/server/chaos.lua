@@ -202,6 +202,7 @@ AddEventHandler('cc:chaos_start', function()
     Chaos.recentEffects = {}
     Chaos.activeEffects = {}
     ChaosLoop()
+    print('[CC] Chaos started; maxRecent=' .. Chaos.maxRecent .. ' maxConcurrent=' .. Chaos.maxConcurrent)
 end)
 
 AddEventHandler('cc:chaos_stop', function()
@@ -220,6 +221,7 @@ AddEventHandler('cc:chaos_stop', function()
     -- defensive — in the current flow both fire, but the spawner is now
     -- idempotent (Cleanup claims activeCougars first).
     State.Broadcast('cc:despawn_all_cougars')
+    print('[CC] Chaos stopped')
 end)
 
 AddEventHandler('cc:chaos_pause', function()

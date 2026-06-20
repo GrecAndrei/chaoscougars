@@ -1,6 +1,75 @@
 # Changelog
 
-## Unreleased — security + bug-fix audit (4 rounds)
+## Unreleased — security + bug-fix audit (9 rounds)
+
+### Round 8 (DRY reset + late-join filter)
+- `client/effects_runner.lua`: extracted `HardResetClientState()` shared
+  between `cc:clear_effects` and `onResourceStop` (was 40 lines of
+  duplicate reset code). Added `DoesEntityExist(ped)` guard so the reset
+  is safe to call after disconnect.
+- `server/late_join.lua`: filter META effects out of the late-join
+  snapshot — their state is already in `State.meta` payload, so
+  re-dispatching the META fn on the client just creates a phantom HUD
+  timer for a no-op effect body.
+- Audit: 9 fns in `effects_generated.lua` share names with base files
+  (`FX_Lowgravity` vs `FX_LowGravity` etc.); these are case-sensitive
+  different fns but registered under different ids, so both run
+  independently. Not a bug.
+
+### Round 7 (setMeta scope bug + fire leak + config validation)
+- `server/security.lua`: `setMeta` was a local function invisible to
+  `chaos.lua`'s `ApplyMetaChange` (R5 regression). Moved to
+  `State.setMeta` so META effects actually apply state. Expanded
+  `votingMode` whitelist to include `'majority'`/`'antimajority'`.
+- `server/chaos.lua`: `ApplyMetaChange` now calls `State.setMeta` with
+  fallback if `security.lua` hasn't loaded.
+- `server/state.lua`: `cc:join` validates `src` is a connected player
+  and de-duplicates re-joins. `ValidateConfig` also checks
+  `Config.BannedClasses` is a `{number = true}` table with classNumber
+  in `[0, 22]`.
+- `client/effects_global.lua`: `FX_LavaGround` caps the live-fire pool
+  at 30 and prunes burnt-out handles (was leaking 270 fires per 45s).
+
+### Round 6 (META meta entries + config validation + memory hygiene)
+- `shared/effects_registry.lua`: added `meta=` entries to all 11 base
+  META effects. Without these, base META effects dispatched through
+  `Effects.GetRandom` would hit `DispatchEffect`'s META branch but
+  `ApplyMetaChange(fx, true)` would no-op (`fx.meta` was nil).
+- `fxmanifest.lua`: removed 4 unused event declarations
+  (`cc:vote_start`, `cc:meta_update`, `cc:vote_cast`, `cc:player_ready`).
+- `client/ownership.lua`: `lastControlAttempt` now uses weak keys
+  (`__mode='k'`) so deleted entities don't leak memory.
+- `server/state.lua`: `EndMission`'s 12s phase-reset `SetTimeout` now
+  guarded against firing AFTER a fresh mission started.
+- `server/state.lua`: full `Config` validation on resource start with
+  per-key warnings and safe-default fallbacks.
+- `server/state.lua`: `src` type-validation on `cc:died`/`respawned`/
+  `reached_finish`/`spawn_load_inc`/`spawn_load_dec`.
+- `server/director.lua`: `src`+`netId`+`cougarType` validation on
+  `cc:cougar_spawned` and `cc:cougar_dead`.
+- `client/effects_runner.lua`: `alive()` closure now also returns false
+  if the player is dead, so 30s effects exit on death.
+- `resource_test/server.lua`: removed 3 wrong `RegisterNetEvent()` calls
+  inside server-side handlers (those are for declaring events; to
+  LISTEN server-side use `AddEventHandler`).
+
+### Round 5 (REPL lockdown + dispatcher hardening)
+- `resource_repl/server.lua`: `/status`, `/players`, `/log` now require
+  the dev token (player names, IPs, game state no longer leaked).
+- `server/chaos.lua`: `DispatchEffect` sources `fx` from
+  `Effects._byId[fx.id]` to defeat fake-fx table attacks; validates
+  `sync_mode` against `_validSyncModes`; META branch refuses without
+  a `meta` table.
+- `server/chaos.lua`: `ChaosLoop` preserves timer on pause→resume via
+  `Chaos.resumeInProgress` flag.
+- `server/state.lua`: `cc:pos` validates `pos` is a vector3-like
+  table and clamps to GTA V world bounds.
+- `server/director.lua`: re-validates target player is still alive
+  right before broadcasting `cc:spawn_cougar`.
+- `client/ownership.lua`: `AIIsMine` 200ms per-entity rate limit
+  prevents `NetworkRequestControlOfEntity` thrashing.
+- `client/spawner.lua`: `Cleanup` and `cc:despawn_cougar` validate
+  `netId` is a number.
 
 ### Round 4 (security hardening)
 - `server/security.lua`: hardened `isAdmin` (type-check, `==` for ACE boolean

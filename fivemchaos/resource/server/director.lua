@@ -124,6 +124,16 @@ local function DirectorLoop()
                 goto skip
             end
 
+            -- Defensive cap check. CountCougars can briefly exceed
+            -- State.GetMaxCougars() if cc:cougar_spawned broadcasts
+            -- arrive out-of-order with the next spawn decision. Cap to
+            -- 2x MaxCougars as a sanity floor.
+            local cap = State.GetMaxCougars() * 2
+            if CountCougars() >= cap then
+                print(('[CC] Director: cougar cap hit (%d >= %d), skipping spawn'):format(CountCougars(), cap))
+                goto skip
+            end
+
             local cougarType = PickCougarType()
             Director.lastSpawn = now
 
@@ -175,6 +185,27 @@ RegisterNetEvent('cc:cougar_dead', function(netId)
     Director.cougars[netId] = nil
     State.Broadcast('cc:cougar_count', CountCougars())
 end)
+
+-- Debug command: dump director state
+RegisterCommand('cc_director', function(src)
+    if src ~= 0 then return end
+    local types = {}
+    for _, c in pairs(Director.cougars) do
+        types[c.type] = (types[c.type] or 0) + 1
+    end
+    local sorted = {}
+    for t, n in pairs(types) do sorted[#sorted + 1] = n .. 'x ' .. t end
+    table.sort(sorted)
+    print('[CC] Director: ' .. tostring(Director.active)
+        .. ' | cougars=' .. CountCougars() .. '/' .. State.GetMaxCougars()
+        .. ' | difficulty=' .. string.format('%.2f', State.difficulty)
+        .. ' | cooldown=' .. string.format('%.1fs', State.GetSpawnCooldown())
+        .. ' | lastSpawn=' .. (os.time() - Director.lastSpawn) .. 's ago'
+    )
+    if #sorted > 0 then
+        print('[CC] Types: ' .. table.concat(sorted, ', '))
+    end
+end, false)
 
 AddEventHandler('cc:director_start', function()
     if Director.active then return end

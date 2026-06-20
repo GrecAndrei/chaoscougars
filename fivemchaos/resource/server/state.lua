@@ -325,6 +325,11 @@ function EndMission(result, detail)
     TriggerEvent('cc:director_stop')
     State.ResetMeta()
     State.activeEffectsList = {}
+    -- Reset spawnLoad so the next mission's executor selection isn't biased
+    -- by the previous mission's load distribution (PickExecutor picks the
+    -- alive player with the LOWEST spawnLoad; leftover load from the last
+    -- run would make the same players always spawn cougars).
+    State.spawnLoad = {}
 
     SetTimeout(12000, function()
         -- Guard against the timeout firing AFTER a fresh mission was

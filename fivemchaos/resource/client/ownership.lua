@@ -14,9 +14,26 @@ end
 -- is the universal gate replacing the old "OwnershipGuard.IsOwner(ped)"
 -- checks for cougar / spawned-ped AI threads in both spawner.lua and
 -- effects_spawn.lua.
+--
+-- Rate limit: track per-entity last-attempt time. If we tried to reclaim
+-- this entity < 200ms ago, return the cached result immediately instead of
+-- issuing a new NetworkRequestControlOfEntity call (which would race with
+-- the engine and add load). Without this, every AI tick (50ms loop) calls
+-- NetworkRequestControlOfEntity on entities we never owned -> spurious
+-- network traffic and possible control-flip flapping.
+local lastControlAttempt = {}
+local CONTROL_RETRY_MS = 200
+
 function AIIsMine(ent)
-    if not DoesEntityExist(ent) or IsEntityDead(ent) then return false end
+    if not ent or not DoesEntityExist(ent) or IsEntityDead(ent) then return false end
     if NetworkHasControlOfEntity(ent) then return true end
+
+    local now = GetGameTimer()
+    if lastControlAttempt[ent] and (now - lastControlAttempt[ent]) < CONTROL_RETRY_MS then
+        return false
+    end
+    lastControlAttempt[ent] = now
+
     NetworkRequestControlOfEntity(ent)
     local t = 0
     while not NetworkHasControlOfEntity(ent) and t < 20 do

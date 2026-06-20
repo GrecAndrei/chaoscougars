@@ -17,12 +17,28 @@ local metaResetGens = {}
 -- Apply or revert a META effect's server-side state changes. META effects no
 -- longer rely on the client firing cc:meta_set_internal (which now requires
 -- admin ACE for defense in depth); the server is the source of truth.
+--
+-- Per-entry validation: a corrupt or future-modified registry entry could
+-- have a non-string key or nil on/off values, which would wipe State.meta.
+-- We re-route every entry through the same setMeta() the meta_set handlers
+-- use, so type-validation and clamping are applied uniformly.
 local function ApplyMetaChange(fx, on)
     if not fx.meta then return end
+    if type(fx.meta) ~= 'table' then return end
     for _, m in ipairs(fx.meta) do
-        State.meta[m.key] = on and m.on or m.off
-        if m.key == 'hideChaosUI' then
-            State.Broadcast('cc:meta_ui', State.meta.hideChaosUI and true or false)
+        if type(m) == 'table' and type(m.key) == 'string' then
+            local value = on and m.on or m.off
+            -- setMeta is the security.lua helper; if it's not loaded yet
+            -- (e.g., shared script ordering issue), fall back to direct
+            -- assignment with a minimal clamp to avoid wiping the field.
+            if setMeta then
+                setMeta(m.key, value, 'meta_apply')
+            else
+                State.meta[m.key] = value
+                if m.key == 'hideChaosUI' then
+                    State.Broadcast('cc:meta_ui', State.meta.hideChaosUI and true or false)
+                end
+            end
         end
     end
 end
@@ -42,8 +58,21 @@ local function DispatchEffect(fx, duration, seed)
     -- passing an arbitrary global function name to the client, where the
     -- effects_runner.lua does `_G[fnName]()` and would happily call
     -- `os.execute` or any other global.
-    if not fx or not fx.fn or not Effects._validFns or not Effects._validFns[fx.fn] then
-        print(('[CC] Refused to dispatch effect with unknown fn (id=%s)'):format(tostring(fx and fx.id or 'nil')))
+    if not fx or not fx.id or type(fx.id) ~= 'string' then
+        print(('[CC] Refused to dispatch effect with bad id (fx=%s)'):format(tostring(fx and fx.id or 'nil')))
+        return
+    end
+    if not Effects._byId or not Effects._byId[fx.id] then
+        print(('[CC] Refused to dispatch effect not in registry (id=%s)'):format(fx.id))
+        return
+    end
+    -- Source id/fn from the registry rather than trusting the caller's table.
+    -- A caller could construct a fake fx object that shares the id but points
+    -- fn at a global like `os.execute`.
+    local registered = Effects._byId[fx.id]
+    fx = registered
+    if not fx.fn or not Effects._validFns or not Effects._validFns[fx.fn] then
+        print(('[CC] Refused to dispatch effect with unknown fn (id=%s)'):format(fx.id))
         return
     end
     if type(duration) ~= 'number' or duration < 0 or duration > 600 then
@@ -56,12 +85,20 @@ local function DispatchEffect(fx, duration, seed)
     end
 
     local sync_mode = fx.sync_mode or SyncMode.LOCAL
+    if not Effects._validSyncModes or not Effects._validSyncModes[sync_mode] then
+        print(('[CC] Refused to dispatch effect with bad sync_mode (id=%s, sync=%s)'):format(fx.id, tostring(sync_mode)))
+        return
+    end
 
     -- Source the truth from the registry; never trust the caller's instant flag.
     local instant = fx.instant and true or false
     if instant then duration = 0 end
 
     if sync_mode == SyncMode.META then
+        if not fx.meta or type(fx.meta) ~= 'table' then
+            print(('[CC] Refused to dispatch META effect without meta table (id=%s)'):format(fx.id))
+            return
+        end
         -- Apply server-side meta state BEFORE broadcasting. The client
         -- META effect body becomes a no-op (just `while alive() do wait end`).
         ApplyMetaChange(fx, true)
@@ -95,9 +132,16 @@ local function ChaosLoop()
     if loopRunning then return end
     loopRunning = true
 
+    -- On first start (not a resume), seed the timer to the full interval so
+    -- the chaos effect doesn't fire immediately. On resume, leave Chaos.timer
+    -- alone so the player doesn't lose time on the clock.
+    if not Chaos.resumeInProgress then
+        Chaos.timer = State.GetChaosInterval()
+    end
+    Chaos.resumeInProgress = false
+
     Citizen.CreateThread(function()
         local interval = State.GetChaosInterval()
-        Chaos.timer = interval
 
         while Chaos.active do
             Citizen.Wait(1000)
@@ -155,6 +199,7 @@ end
 
 AddEventHandler('cc:chaos_start', function()
     Chaos.active = true
+    Chaos.resumeInProgress = false
     Chaos.recentEffects = {}
     Chaos.activeEffects = {}
     ChaosLoop()
@@ -165,6 +210,7 @@ AddEventHandler('cc:chaos_stop', function()
     Chaos.timer = 0
     Chaos.activeEffects = {}
     Chaos.recentEffects = {}
+    Chaos.resumeInProgress = false
     -- Cancel any pending meta reset timers. The SetTimeouts will still fire,
     -- but each will see its generation is no longer current and become a
     -- no-op. This guarantees a clean reset on next mission start.
@@ -183,6 +229,7 @@ end)
 
 AddEventHandler('cc:chaos_resume', function()
     Chaos.active = true
+    Chaos.resumeInProgress = true
     ChaosLoop()
 end)
 

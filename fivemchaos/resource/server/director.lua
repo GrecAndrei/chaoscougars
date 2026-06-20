@@ -113,6 +113,17 @@ local function DirectorLoop()
             local pos = GetSpawnPos(target)
             if not pos then goto skip end
 
+            -- Re-validate the target is still a connected alive player.
+            -- PickTargetPlayer uses a snapshot of State.players, so a
+            -- disconnect between snapshot and broadcast would broadcast a
+            -- spawn to a phantom target id. cc:spawn_cougar on the client
+            -- side gates on targetPlayerId == myServerId, so a phantom id
+            -- would mean every client short-circuits and no one ever
+            -- claims ownership -> cougar just stands there.
+            if not State.players[target.id] or not State.players[target.id].alive then
+                goto skip
+            end
+
             local cougarType = PickCougarType()
             Director.lastSpawn = now
 

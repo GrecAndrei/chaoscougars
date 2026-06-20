@@ -124,6 +124,7 @@ end
 -- even if both race. The 3-second corpse delay has been removed: the engine
 -- plays the death animation independently of entity existence.
 local function Cleanup(netId)
+    if type(netId) ~= 'number' then return end
     local data = activeCougars[netId]
     if not data then return end
     activeCougars[netId] = nil
@@ -702,6 +703,7 @@ RegisterNetEvent('cc:spawn_cougar', function(cougarType, pos, targetPlayerId)
 end)
 
 RegisterNetEvent('cc:despawn_cougar', function(netId)
+    if type(netId) ~= 'number' then return end
     Cleanup(netId)
 end)
 

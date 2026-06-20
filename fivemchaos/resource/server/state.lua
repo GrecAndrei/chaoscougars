@@ -168,8 +168,18 @@ end)
 
 RegisterNetEvent('cc:pos', function(pos)
     local src = source
+    if type(src) ~= 'number' or src < 1 then return end
+    if type(pos) ~= 'table' then return end
+    if type(pos.x) ~= 'number' or type(pos.y) ~= 'number' or type(pos.z) ~= 'number' then return end
+    -- Clamp to a sane GTA V world bound. The map is roughly ±10000 on each
+    -- axis; anything outside is either a cheat-injected coordinate or a
+    -- corrupted GetEntityCoords return. Either way it breaks the difficulty
+    -- math (sqrt of a huge squared distance = overflow).
+    if math.abs(pos.x) > 100000 or math.abs(pos.y) > 100000 or math.abs(pos.z) > 10000 then
+        return
+    end
     if State.players[src] then
-        State.players[src].pos = pos
+        State.players[src].pos = vector3(pos.x, pos.y, pos.z)
     end
 end)
 

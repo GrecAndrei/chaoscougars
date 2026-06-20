@@ -136,8 +136,13 @@ SetHttpHandler(function(req, res)
         return token == expected
     end
 
-    -- GET /status
+    -- All endpoints require the dev token. /status, /players, /log leak
+    -- player names, IPs, and game state — anyone with the RCON port and a
+    -- script kiddie recon tool can scrape them. The previous behavior of
+    -- leaving read-only endpoints open was a footgun. Set
+    -- `chaoscougar_dev_token` in server.cfg to enable any endpoint.
     if path == '/status' and method == 'GET' then
+        if not isDev() then deny('dev token required'); return end
         local status = {
             phase = State and State.phase or 'unknown',
             difficulty = State and State.difficulty or 0,
@@ -150,6 +155,7 @@ SetHttpHandler(function(req, res)
 
     -- GET /players
     if path == '/players' and method == 'GET' then
+        if not isDev() then deny('dev token required'); return end
         local players = {}
         for _, id in ipairs(GetPlayers()) do
             players[#players + 1] = {
@@ -164,6 +170,7 @@ SetHttpHandler(function(req, res)
 
     -- GET /log
     if path == '/log' and method == 'GET' then
+        if not isDev() then deny('dev token required'); return end
         local recent = {}
         local start = math.max(1, #LOG - 50)
         for i = start, #LOG do

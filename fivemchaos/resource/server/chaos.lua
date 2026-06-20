@@ -251,3 +251,22 @@ RegisterCommand('cc_effects', function(src)
         print(('  %02d. %-20s %-15s %s%s'):format(i, fx.id, fx.sync_mode or '?', fx.name, fx.instant and ' [instant]' or ''))
     end
 end, false)
+
+RegisterCommand('cc_active', function(src)
+    if src ~= 0 then return end
+    local now = os.time()
+    print('[CC] Active effects:')
+    if #State.activeEffectsList == 0 then print('  (none)') end
+    for i, entry in ipairs(State.activeEffectsList) do
+        local remaining = math.max(0, entry.expiresAt - now)
+        print(('  %02d. %-22s %-15s %s expires=%ds seed=%s'):format(
+            i, entry.id, entry.sync_mode or '?', entry.name or '?', remaining, tostring(entry.seed)))
+    end
+    print('[CC] Recent effects:')
+    local n = 0
+    for id, _ in pairs(Chaos.recentEffects) do
+        n = n + 1
+        print('  ' .. id)
+    end
+    if n == 0 then print('  (none)') end
+end, false)

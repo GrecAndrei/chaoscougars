@@ -377,6 +377,21 @@ RegisterCommand('cc_difficulty', function(src, args)
     ))
 end, false)
 
+RegisterCommand('cc_status', function(src)
+    if src ~= 0 then return end
+    local players = {}
+    for id, p in pairs(State.players) do
+        players[#players + 1] = string.format('  [%d] %s %s (load=%d, pos=%s)',
+            id, p.name or '?', p.alive and 'alive' or 'DEAD',
+            State.spawnLoad[id] or 0,
+            p.pos and string.format('%.0f,%.0f', p.pos.x, p.pos.y) or 'nil')
+    end
+    table.sort(players, function(a, b) return a < b end)
+    print(('[CC] Phase: %s | Difficulty: %.2f | Players: %d | Alive: %d'):format(
+        State.phase, State.difficulty, State.PlayerCount(), State.AliveCount()))
+    if #players > 0 then print(table.concat(players, '\n')) end
+end, false)
+
 -- === CONFIG VALIDATION ===
 
 -- Validate required Config values on resource start. Without this, a
@@ -430,6 +445,15 @@ local function ValidateConfig()
     if not vecOk('Finish') then
         bad = bad + 1
         print('[CC] Config.Finish is not a valid vector3')
+    end
+    -- Cross-field sanity: MinSurvivors cannot exceed MinPlayers, else the
+    -- mission can't ever be won (the immediate AliveCount check would
+    -- always fail). Warn and clamp.
+    if Config.MinSurvivors and Config.MinPlayers and Config.MinSurvivors > Config.MinPlayers then
+        bad = bad + 1
+        print(('[CC] Config.MinSurvivors (%d) > MinPlayers (%d) - clamping to MinPlayers'):format(
+            Config.MinSurvivors, Config.MinPlayers))
+        Config.MinSurvivors = Config.MinPlayers
     end
     -- Validate BannedClasses is a table of {classNumber = true} entries where
     -- classNumber is in [0, 22] (FiveM has 22 vehicle classes, 0-22).

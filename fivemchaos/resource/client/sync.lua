@@ -19,6 +19,13 @@ Citizen.CreateThread(function()
     -- Without this gate, a player connecting mid-mission would be teleported
     -- to the start position before the late-join sync arrives, fighting the
     -- mission-start teleport (and the player's actual position would be lost).
+    --
+    -- Race-safety: TriggerClientEvent messages can arrive BEFORE the
+    -- session is fully started (FiveM fires them as soon as the connection
+    -- is up, even during the loading-screen Wait). Wait an extra tick here
+    -- to let any pending cc:state / cc:late_join_sync events drain into
+    -- MyState before we check it.
+    Citizen.Wait(100)
     if MyState.phase == Phase.LOBBY then
         NetworkResurrectLocalPlayer(Config.Start.x, Config.Start.y, Config.Start.z, 270.0, true, false)
         SetEntityCoords(ped, Config.Start.x, Config.Start.y, Config.Start.z, false, false, false, false)

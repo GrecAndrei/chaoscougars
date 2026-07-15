@@ -2,6 +2,7 @@ State = {
     phase = Phase.LOBBY,
     players = {},
     startTime = 0,
+    missionGeneration = 0,
     difficulty = 0.0,
     activeEffectsList = {},
     spawnLoad = {},
@@ -151,6 +152,7 @@ RegisterNetEvent('cc:join', function()
         name = GetPlayerName(src),
         alive = true,
         pos = vector3(0, 0, 0),
+        downedAt = nil,
     }
     State.spawnLoad[src] = 0
     TriggerClientEvent('cc:state', src, State.phase, State.startTime)
@@ -172,7 +174,8 @@ end)
 RegisterNetEvent('cc:pos', function(pos)
     local src = source
     if type(src) ~= 'number' or src < 1 then return end
-    if type(pos) ~= 'table' then return end
+    local posType = type(pos)
+    if posType ~= 'table' and posType ~= 'userdata' and posType ~= 'vector3' then return end
     if type(pos.x) ~= 'number' or type(pos.y) ~= 'number' or type(pos.z) ~= 'number' then return end
     -- Clamp to a sane GTA V world bound. The map is roughly ±10000 on each
     -- axis; anything outside is either a cheat-injected coordinate or a
@@ -183,18 +186,46 @@ RegisterNetEvent('cc:pos', function(pos)
     end
     if State.players[src] then
         State.players[src].pos = vector3(pos.x, pos.y, pos.z)
+        State.players[src].lastPosAt = os.time()
     end
 end)
 
 RegisterNetEvent('cc:died', function()
     local src = source
-    if not State.players[src] or not State.players[src].alive then return end
-    State.players[src].alive = false
-    State.Broadcast('cc:player_died', src, State.AliveCount())
+    local player = State.players[src]
+    if State.phase ~= Phase.RUNNING or not player or not player.alive then return end
+    player.alive = false
+    player.downedAt = os.time()
+    State.Broadcast('cc:player_downed', src, {
+        x = player.pos.x,
+        y = player.pos.y,
+        z = player.pos.z,
+    }, State.AliveCount())
 
     if State.phase == Phase.RUNNING and State.AliveCount() < Config.MinSurvivors then
         EndMission('LOST', 'All players dead')
     end
+end)
+
+-- Revives are validated entirely on the server. The living rescuer may only
+-- revive a currently-downed teammate within the configured distance and time
+-- window; clients never choose a respawn location or mark themselves alive.
+RegisterNetEvent('cc:revive', function(targetId)
+    local src = source
+    if State.phase ~= Phase.RUNNING then return end
+    if type(src) ~= 'number' or type(targetId) ~= 'number' or targetId % 1 ~= 0 then return end
+    if src == targetId then return end
+    local rescuer, target = State.players[src], State.players[targetId]
+    if not rescuer or not rescuer.alive or not rescuer.pos then return end
+    if not target or target.alive or not target.pos or not target.downedAt then return end
+    if os.time() - target.downedAt > Config.ReviveWindowSec then return end
+    if #(rescuer.pos - target.pos) > Config.ReviveDistance + 1.5 then return end
+
+    target.alive = true
+    target.downedAt = nil
+    target.lastPosAt = os.time()
+    TriggerClientEvent('cc:revived', targetId, {x = target.pos.x, y = target.pos.y, z = target.pos.z})
+    State.Broadcast('cc:player_revived', targetId, src)
 end)
 
 RegisterNetEvent('cc:respawned', function()
@@ -203,16 +234,23 @@ RegisterNetEvent('cc:respawned', function()
     if State.players[src] then
         State.players[src].alive = true
         State.players[src].pos = Config.Start
+        State.players[src].downedAt = nil
     end
 end)
 
 RegisterNetEvent('cc:reached_finish', function()
     local src = source
     if type(src) ~= 'number' or src < 1 then return end
-    if State.phase == Phase.RUNNING then
-        local name = State.players[src] and State.players[src].name or 'Unknown'
-        EndMission('WON', name .. ' reached Paleto Bay')
-    end
+    if State.phase ~= Phase.RUNNING then return end
+
+    -- Finishing is reported by the client, but the server already receives
+    -- the player's position once per second. Never let a raw NetEvent end a
+    -- run without checking that authoritative mission snapshot.
+    local player = State.players[src]
+    if not player or not player.alive or not player.pos then return end
+    if #(player.pos - Config.Finish) > Config.WinRadius then return end
+
+    EndMission('WON', player.name .. ' reached Paleto Bay')
 end)
 
 RegisterNetEvent('cc:spawn_load_inc', function()
@@ -236,6 +274,29 @@ Citizen.CreateThread(function()
             State.UpdateDifficulty()
             State.Broadcast('cc:difficulty', State.difficulty)
             State.CleanExpiredEffects()
+        end
+    end
+end)
+
+-- Stay close and the pack recovers together. This is deliberately modest:
+-- it repairs a little damage and gives a short engine surge, not immunity.
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(Config.PackSurgeIntervalMs)
+        if State.phase == Phase.RUNNING then
+            for id, player in pairs(State.players) do
+                if player.alive and player.pos then
+                    local nearby = 0
+                    for otherId, other in pairs(State.players) do
+                        if otherId ~= id and other.alive and other.pos and #(player.pos - other.pos) <= Config.PackRadius then
+                            nearby = nearby + 1
+                        end
+                    end
+                    if nearby > 0 then
+                        TriggerClientEvent('cc:pack_surge', id, nearby)
+                    end
+                end
+            end
         end
     end
 end)
@@ -281,6 +342,8 @@ function StartMission()
     end
 
     State.phase = Phase.STARTING
+    State.missionGeneration = State.missionGeneration + 1
+    local generation = State.missionGeneration
     State.startTime = os.time()
     State.difficulty = 0.0
     State.activeEffectsList = {}
@@ -290,6 +353,7 @@ function StartMission()
     for id, p in pairs(State.players) do
         p.alive = true
         p.pos = Config.Start
+        p.downedAt = nil
         State.spawnLoad[id] = 0
     end
 
@@ -300,6 +364,15 @@ function StartMission()
     })
 
     SetTimeout(3000, function()
+        -- A startup can be cancelled by /cc_stop or lose its final player
+        -- during the countdown. Do not let this stale timeout resurrect a
+        -- mission that has already returned to the lobby.
+        if State.phase ~= Phase.STARTING or State.missionGeneration ~= generation then return end
+        if State.PlayerCount() < Config.MinPlayers then
+            State.phase = Phase.LOBBY
+            State.Broadcast('cc:state', Phase.LOBBY, 0)
+            return
+        end
         State.phase = Phase.RUNNING
         State.Broadcast('cc:state', Phase.RUNNING, State.startTime)
         TriggerEvent('cc:chaos_start')
@@ -308,6 +381,17 @@ function StartMission()
 end
 
 function EndMission(result, detail)
+    if State.phase == Phase.STARTING then
+        -- Cancel a not-yet-running start without displaying a false mission
+        -- result. The captured StartMission timeout checks this generation.
+        State.missionGeneration = State.missionGeneration + 1
+        State.phase = Phase.LOBBY
+        State.ResetMeta()
+        State.activeEffectsList = {}
+        State.Broadcast('cc:clear_effects')
+        State.Broadcast('cc:state', Phase.LOBBY, 0)
+        return
+    end
     if State.phase ~= Phase.RUNNING and State.phase ~= Phase.PAUSED then return end
     local previousPhase = State.phase
     State.phase = result
@@ -340,6 +424,7 @@ function EndMission(result, detail)
             State.phase = Phase.LOBBY
             for _, p in pairs(State.players) do
                 p.alive = true
+                p.downedAt = nil
             end
             State.Broadcast('cc:state', Phase.LOBBY, 0)
         end
@@ -406,6 +491,14 @@ local function ValidateConfig()
     local checks = {
         {key = 'MinPlayers',         v = Config.MinPlayers,         t = 'number', lo = 1, hi = 64,  def = 1},
         {key = 'MinSurvivors',       v = Config.MinSurvivors,       t = 'number', lo = 1, hi = 32,  def = 1},
+        {key = 'ReviveDistance',     v = Config.ReviveDistance,     t = 'number', lo = 1, hi = 30,  def = 7},
+        {key = 'ReviveHoldMs',       v = Config.ReviveHoldMs,       t = 'number', lo = 500, hi = 15000, def = 2500},
+        {key = 'ReviveWindowSec',    v = Config.ReviveWindowSec,    t = 'number', lo = 5, hi = 300, def = 35},
+        {key = 'ReviveInvulnMs',     v = Config.ReviveInvulnMs,     t = 'number', lo = 0, hi = 15000, def = 4000},
+        {key = 'PackRadius',         v = Config.PackRadius,         t = 'number', lo = 5, hi = 200, def = 40},
+        {key = 'PackSurgeIntervalMs',v = Config.PackSurgeIntervalMs,t = 'number', lo = 500, hi = 30000, def = 3000},
+        {key = 'PackEngineRepair',   v = Config.PackEngineRepair,   t = 'number', lo = 0, hi = 200, def = 18},
+        {key = 'PackHealthRestore',  v = Config.PackHealthRestore,  t = 'number', lo = 0, hi = 50, def = 4},
         {key = 'PauseThreshold',     v = Config.PauseThreshold,     t = 'number', lo = 1, hi = 64,  def = 1},
         {key = 'VoteWindowSec',      v = Config.VoteWindowSec,      t = 'number', lo = 1, hi = 120, def = 30},
         {key = 'EffectDuration',     v = Config.EffectDuration,     t = 'number', lo = 1, hi = 600, def = 30},
@@ -436,7 +529,9 @@ local function ValidateConfig()
     -- Also validate vector3 Start/Finish positions
     local function vecOk(name)
         local v = Config[name]
-        return type(v) == 'table' and type(v.x) == 'number' and type(v.y) == 'number' and type(v.z) == 'number'
+        local t = type(v)
+        return (t == 'table' or t == 'userdata' or t == 'vector3')
+            and type(v.x) == 'number' and type(v.y) == 'number' and type(v.z) == 'number'
     end
     if not vecOk('Start') then
         bad = bad + 1

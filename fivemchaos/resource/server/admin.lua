@@ -63,14 +63,7 @@ RegisterNetEvent('cc:admin_effect', function(id)
     if not Effects._validFns or not Effects._validFns[fx.fn] then return end
     local duration = fx.instant and 0 or (fx.short and Config.ShortDuration or Config.EffectDuration)
     local seed = math.random(1, 2147483647)
-    local sync_mode = fx.sync_mode or SyncMode.LOCAL
-
-    if sync_mode == SyncMode.SPAWN_SINGLE then
-        local executor = src
-        TriggerClientEvent('cc:trigger_effect', executor, fx.id, fx.name, fx.fn, fx.instant and true or false, duration, seed)
-    else
-        TriggerClientEvent('cc:trigger_effect', -1, fx.id, fx.name, fx.fn, fx.instant and true or false, duration, seed)
-    end
+    Chaos.DispatchEffect(fx, duration, seed, src)
 end)
 
 RegisterNetEvent('cc:admin_spawn_cougar', function(cougarType, pos)
@@ -78,13 +71,14 @@ RegisterNetEvent('cc:admin_spawn_cougar', function(cougarType, pos)
     if not adminGate(src, 'spawn_cougar') then return end
     if type(cougarType) ~= 'string' or cougarType == '' then return end
     -- Validate pos is a 3D vector
-    if type(pos) ~= 'table' or type(pos.x) ~= 'number' or type(pos.y) ~= 'number' or type(pos.z) ~= 'number' then
+    local posType = type(pos)
+    if (posType ~= 'table' and posType ~= 'userdata' and posType ~= 'vector3')
+        or type(pos.x) ~= 'number' or type(pos.y) ~= 'number' or type(pos.z) ~= 'number' then
         return
     end
-    -- Broadcast to ALL clients with targetPlayerId=src so the admin's client
-    -- runs the spawner (and is the AI owner). Matches director.lua's flow
-    -- and lets observers early-return in the cc:spawn_cougar handler.
-    TriggerClientEvent('cc:spawn_cougar', -1, cougarType, pos, src)
+    -- Use the same server-issued spawn request as the director. This keeps
+    -- manually spawned cougars inside the client-report authorization path.
+    Director.QueueSpawn(cougarType, pos, src)
 end)
 
 RegisterNetEvent('cc:admin_kill_cougars', function()

@@ -133,11 +133,16 @@ local function HardResetClientState()
     RenderScriptCams(false, false, 0, true, true)
     StopGameplayCamShaking(true)
     ClearWeatherTypePersist()
+    ClearOverrideWeather()
     SetArtificialLightsState(false)
     NetworkClearClockTimeOverride()
 
     local ped = PlayerPedId()
     if ped and DoesEntityExist(ped) then
+        -- Some generated effects use SetPlayerInvincible while others use
+        -- SetEntityInvincible. They are separate natives, so reset both on
+        -- every cancellation/mission cleanup.
+        SetPlayerInvincible(PlayerId(), false)
         SetEntityInvincible(ped, false)
         SetEntityMaxHealth(ped, 200)
         ResetPedMovementClipset(ped, 0.0)
@@ -148,6 +153,7 @@ local function HardResetClientState()
     local veh = ped and GetVehiclePedIsIn(ped, false) or 0
     if veh ~= 0 and DoesEntityExist(veh) then
         SetVehicleEnginePowerMultiplier(veh, 1.0)
+        SetVehicleCheatPowerIncrease(veh, 1.0)
         SetVehicleReduceGrip(veh, false)
         SetEntityInvincible(veh, false)
         SetEntityProofs(veh, false, false, false, false, false, false, false, false)

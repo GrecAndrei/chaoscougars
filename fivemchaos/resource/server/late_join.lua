@@ -49,6 +49,6 @@ AddEventHandler('cc:player_joined_running', function(src)
     end
 
     TriggerClientEvent('cc:late_join_sync', src, snapshot, State.difficulty, State.meta, cougars)
-    TriggerClientEvent('cc:cougar_count', src, CountCougars())
+    TriggerClientEvent('cc:cougar_count', src, Director.CountCougars())
     TriggerClientEvent('cc:difficulty', src, State.difficulty)
 end)

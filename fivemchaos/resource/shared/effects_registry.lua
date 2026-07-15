@@ -17,7 +17,7 @@ Effects.Pool = {
     {id='flying_cars',       name='Flying Cars',             fn='FX_FlyingCars',         sync_mode=SyncMode.LOCAL},
     {id='cruise_control',    name='Cruise Control',           fn='FX_CruiseControl',      sync_mode=SyncMode.LOCAL},
     {id='no_steering',       name='No Steering',             fn='FX_NoSteering',         sync_mode=SyncMode.LOCAL, short=true},
-    {id='invincible_cars',   name='Invincible Vehicles',      fn='FX_InvincibleCars',     sync_mode=SyncMode.LOCAL},
+    {id='invincible_cars',   name='Invincible Vehicles',      fn='FX_InvincibleCars',     sync_mode=SyncMode.LOCAL, runDisabled=true},
     {id='full_accel',        name='Full Throttle',            fn='FX_FullAccel',          sync_mode=SyncMode.LOCAL, short=true},
     {id='speed_limit',       name='30 MPH Limit',            fn='FX_SpeedLimit',         sync_mode=SyncMode.LOCAL},
     {id='explode_on_impact', name='Vehicles Explode On Hit',  fn='FX_ExplodeOnImpact',    sync_mode=SyncMode.LOCAL, short=true},
@@ -39,7 +39,7 @@ Effects.Pool = {
     {id='launch_player',     name='Launch Player Up',         fn='FX_LaunchPlayer',       sync_mode=SyncMode.LOCAL, instant=true},
     {id='give_weapon',       name='Random Weapon',            fn='FX_GiveWeapon',         sync_mode=SyncMode.LOCAL, instant=true},
     {id='no_sprint',         name='No Sprint',               fn='FX_NoSprint',           sync_mode=SyncMode.LOCAL},
-    {id='invincible',        name='Invincibility',           fn='FX_Invincible',         sync_mode=SyncMode.LOCAL, short=true},
+    {id='invincible',        name='Invincibility',           fn='FX_Invincible',         sync_mode=SyncMode.LOCAL, short=true, runDisabled=true},
     {id='bees',              name='BEES!',                   fn='FX_Bees',               sync_mode=SyncMode.LOCAL},
     {id='keep_running',      name='Keep Running',            fn='FX_KeepRunning',        sync_mode=SyncMode.LOCAL, short=true},
     {id='heavy_recoil',      name='Heavy Recoil',            fn='FX_HeavyRecoil',        sync_mode=SyncMode.LOCAL},
@@ -186,31 +186,132 @@ Effects.Pool = {
     {id='meta_chaos_ramp',      name='Chaos Ramp',             fn='FX_MetaChaosRamp',      sync_mode=SyncMode.META, meta={{key='additionalEffects', on=1, off=0},{key='timerModifier', on=0.5, off=1.0}}},
 }
 
--- Build lookup
-Effects._byId = {}
-for _, fx in ipairs(Effects.Pool) do
-    Effects._byId[fx.id] = fx
+-- Effects that write the same persistent GTA state must never be live at the
+-- same time.  The generated catalogue is deliberately large, so maintain the
+-- policy here instead of relying on every individual entry to remember an
+-- `incompatible` list.  Scope locks are intentionally conservative: two
+-- LOCAL, VISUAL, or GLOBAL_OWNED effects can have arbitrary cleanup code, so
+-- they cannot race each other.  Native-state channels additionally protect
+-- the handful of effects which cross those scopes.
+local CHANNELS_BY_FN = {}
+
+local function MapChannel(channel, names)
+    for _, name in ipairs(names) do CHANNELS_BY_FN[name] = channel end
 end
 
-function Effects.GetRandom(usedRecently, activeIds)
+MapChannel('state.gravity', {
+    'FX_LowGravity', 'FX_VeryLowGravity', 'FX_HighGravity', 'FX_MoonGravity',
+    'FX_Lowgravity', 'FX_Verylowgravity', 'FX_Insanegravity', 'FX_Invertgravity',
+    'FX_MiscSidewaysGravity', 'FX_MiscRandomgravity', 'FX_PlayerGravity', 'FX_GravityPulse',
+})
+MapChannel('state.timescale', {
+    'FX_SlowMo', 'FX_FastMo', 'FX_VeryFast', 'FX_MiscQuickSprunkStop',
+    'FX_PlayerDeadEye', 'FX_PlayerGta2', 'FX_TimeX02', 'FX_TimeX05', 'FX_TimeSuperhot',
+})
+MapChannel('state.clock', {
+    'FX_WorldBlackout', 'FX_MiscFireworks', 'FX_ScreenFullbright', 'FX_TimeMorning',
+    'FX_TimeDay', 'FX_TimeEvening', 'FX_TimeNight', 'FX_TimeLocalTime',
+    'FX_TimeQuickday', 'FX_ReverseTime', 'FX_Midnight', 'FX_HighNoon',
+})
+MapChannel('state.weather', {
+    'FX_WeatherExtrasunny', 'FX_WeatherStormy', 'FX_WeatherFoggy', 'FX_WeatherNeutral',
+    'FX_WeatherSnowy', 'FX_WeatherRandomizer', 'FX_WorldSnow', 'FX_Storm', 'FX_Fog',
+    'FX_Snow', 'FX_DiscoWeather', 'FX_Smog', 'FX_RainStorm', 'FX_ScreenBright',
+})
+MapChannel('state.postfx', {
+    'FX_Bees', 'FX_MiscFakecrash', 'FX_WorldLowpoly', 'FX_MiscPortrait', 'FX_MiscCredits',
+    'FX_MiscDvdscreensaver', 'FX_MiscFlipUi', 'FX_ScreenMexico', 'FX_ScreenFog',
+    'FX_ScreenLowrenderdist', 'FX_ScreenLsd', 'FX_ScreenFullbright', 'FX_ScreenBubblevision',
+    'FX_ScreenLsnoire', 'FX_ScreenNeedglasses', 'FX_TimecycleFuzzy', 'FX_TimecycleDarkworld',
+    'FX_ScreenArc', 'FX_ScreenColorfulworld', 'FX_ScreenDimwarp', 'FX_ScreenFckautorotate',
+    'FX_ScreenFoldedscreen', 'FX_ScreenFourthdimension', 'FX_ScreenHueshift',
+    'FX_ScreenInvertedcolors', 'FX_ScreenLocalcoop', 'FX_ScreenMirrored', 'FX_ScreenRgbland',
+    'FX_ScreenScreenfreakout', 'FX_ScreenScreenpotato', 'FX_ScreenShatteredscreen',
+    'FX_ScreenSwappedcolors', 'FX_ScreenTextureless', 'FX_ScreenTnpanel', 'FX_ScreenWarpedcam',
+    'FX_LSD', 'FX_Noir', 'FX_DeepFried', 'FX_FogScreen', 'FX_ExtremeBright', 'FX_Greyscale',
+    'FX_WavyVision', 'FX_FishEye', 'FX_Bloom',
+})
+MapChannel('state.vehicle_handling', {
+    'FX_SlipperyCars', 'FX_StickyTires', 'FX_VehsSlippery', 'FX_Beyblade', 'FX_OilLeaks',
+})
+MapChannel('state.vehicle_protection', {
+    'FX_InvincibleCars', 'FX_VehsInvincible', 'FX_VehsBeyblade',
+})
+MapChannel('state.player_protection', {
+    'FX_Invincible', 'FX_PlayerInvincible', 'FX_PlayerFakedeath', 'FX_PlayerRocket',
+})
+MapChannel('state.ragdoll', {
+    'FX_PlayerNoragdoll', 'FX_MiscWitnessProtection',
+})
+
+local function AddChannel(channels, seen, channel)
+    if channel and not seen[channel] then
+        seen[channel] = true
+        channels[#channels + 1] = channel
+    end
+end
+
+function Effects.AssignChannels(fx)
+    local channels, seen = {}, {}
+    for _, channel in ipairs(fx.channels or {}) do AddChannel(channels, seen, channel) end
+
+    -- Instant actions have no lifecycle to overlap.  Their permanent effects
+    -- are deliberately one-shot, while every persistent effect receives at
+    -- least one lock below.
+    if fx.instant then return channels end
+
+    if fx.sync_mode == SyncMode.LOCAL then
+        AddChannel(channels, seen, 'scope.local')
+    elseif fx.sync_mode == SyncMode.VISUAL then
+        AddChannel(channels, seen, 'scope.visual')
+    elseif fx.sync_mode == SyncMode.GLOBAL_OWNED then
+        AddChannel(channels, seen, 'scope.world')
+    elseif fx.sync_mode == SyncMode.SPAWN_SINGLE then
+        AddChannel(channels, seen, 'scope.spawn')
+    elseif fx.sync_mode == SyncMode.META then
+        for _, meta in ipairs(fx.meta or {}) do
+            if type(meta) == 'table' and type(meta.key) == 'string' then
+                AddChannel(channels, seen, 'meta.' .. meta.key)
+            end
+        end
+    end
+
+    AddChannel(channels, seen, CHANNELS_BY_FN[fx.fn])
+    return channels
+end
+
+function Effects.ConflictsWithActive(fx, activeIds, activeChannels)
+    activeIds = activeIds or {}
+    activeChannels = activeChannels or {}
+
+    if activeIds[fx.id] then return true end
+
+    for _, activeId in pairs(activeIds) do
+        local active = Effects._byId and Effects._byId[activeId]
+        for _, incompatible in ipairs((active and active.incompatible) or {}) do
+            if incompatible == fx.id then return true end
+        end
+    end
+    for _, incompatible in ipairs(fx.incompatible or {}) do
+        if activeIds[incompatible] then return true end
+    end
+    for _, channel in ipairs(fx.channels or {}) do
+        if (activeChannels[channel] or 0) > 0 then return true end
+    end
+    return false
+end
+
+function Effects.GetRandom(usedRecently, activeIds, activeChannels)
     usedRecently = usedRecently or {}
     activeIds = activeIds or {}
 
     local candidates = {}
     for _, fx in ipairs(Effects.Pool) do
-        if not usedRecently[fx.id] and not activeIds[fx.id] then
-            local dominated = false
-            if fx.incompatible then
-                for _, inc in ipairs(fx.incompatible) do
-                    if activeIds[inc] then dominated = true; break end
-                end
-            end
-            if not dominated then
+        if not fx.runDisabled and not usedRecently[fx.id] and not Effects.ConflictsWithActive(fx, activeIds, activeChannels) then
                 local w = fx.weight or 10
                 for i = 1, w do
                     candidates[#candidates + 1] = fx
                 end
-            end
         end
     end
 
@@ -222,4 +323,26 @@ end
 
 function Effects.FindById(id)
     return Effects._byId[id]
+end
+
+function Effects.FinalizeRegistry()
+    Effects._byId = {}
+    Effects._validFns = {}
+    Effects._validSyncModes = {}
+
+    for _, fx in ipairs(Effects.Pool) do
+        assert(type(fx.id) == 'string' and fx.id ~= '', 'Effect registry contains an invalid id')
+        assert(not Effects._byId[fx.id], ('Effect registry contains duplicate id: %s'):format(fx.id))
+        assert(type(fx.fn) == 'string' and fx.fn:match('^FX_'), ('Effect registry contains invalid fn: %s'):format(fx.id))
+        assert(Effects._validSyncModes[fx.sync_mode] or fx.sync_mode == SyncMode.LOCAL or fx.sync_mode == SyncMode.GLOBAL_OWNED or fx.sync_mode == SyncMode.VISUAL or fx.sync_mode == SyncMode.SPAWN_SINGLE or fx.sync_mode == SyncMode.META,
+            ('Effect registry contains invalid sync mode: %s'):format(fx.id))
+
+        fx.channels = Effects.AssignChannels(fx)
+        if not fx.instant then
+            assert(#fx.channels > 0, ('Persistent effect has no state channel: %s'):format(fx.id))
+        end
+        Effects._byId[fx.id] = fx
+        Effects._validFns[fx.fn] = true
+        Effects._validSyncModes[fx.sync_mode] = true
+    end
 end

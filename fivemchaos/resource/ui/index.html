@@ -1,99 +1,109 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chaos Mod HUD</title>
-<style>
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-</style>
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chaos Run</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="hud" class="hud-container">
-
-  <div id="cougar-counter" class="cougar-counter hidden">
-    <span class="cougar-icon">&#x1f43e;</span>
-    <span id="cougar-count" class="cougar-count">0</span>
-  </div>
-
-  <div id="timer-bar" class="timer-bar hidden">
-    <div id="timer-fill" class="timer-fill"></div>
-    <div id="timer-label" class="timer-label"></div>
-  </div>
-
-  <div id="effects-list" class="effects-list"></div>
-
-  <div id="vote-panel" class="vote-panel hidden">
-    <div class="vote-header">
-      <span class="vote-title">VOTE</span>
-      <span id="vote-time" class="vote-time">10s</span>
-    </div>
-    <div id="vote-options" class="vote-options"></div>
-  </div>
-
-  <div id="hit-container" class="hit-container"></div>
-
-  <div id="phase-overlay" class="phase-overlay hidden">
-    <div id="phase-text" class="phase-text"></div>
-  </div>
-
-  <!-- Admin Panel (F5 to toggle) -->
-  <div id="admin-panel" class="admin-panel hidden">
-    <div class="panel-header">
-      <span class="panel-title">CHAOS CONTROL</span>
-      <span class="panel-close" id="panel-close">&times;</span>
-    </div>
-
-    <div class="panel-section">
-      <div class="section-label">Mission</div>
-      <div class="panel-row">
-        <button class="panel-btn btn-start" data-action="start">Start Run</button>
-        <button class="panel-btn btn-stop" data-action="stop">Stop Run</button>
-        <button class="panel-btn" data-action="pause">Pause</button>
-        <button class="panel-btn" data-action="resume">Resume</button>
+  <main id="hud" class="hud" aria-live="polite">
+    <!-- Mission status: intentionally the only persistent top-left element. -->
+    <section id="timer-bar" class="mission-clock hidden" aria-label="Time until next chaos event">
+      <div class="mission-clock__eyebrow">CHAOS RUN <span class="mission-clock__divider">/</span> NEXT EVENT</div>
+      <div class="mission-clock__row">
+        <span id="timer-label" class="mission-clock__time">--:--</span>
+        <div class="mission-clock__track"><div id="timer-fill" class="mission-clock__fill"></div></div>
       </div>
+    </section>
+
+    <!-- Effects are grouped away from the game reticle and map. -->
+    <section id="effects-region" class="effects-region" aria-label="Active chaos effects">
+      <div id="effects-title" class="effects-title hidden">ACTIVE CHAOS</div>
+      <div id="effects-list" class="effects-list"></div>
+    </section>
+
+    <!-- Shown only when cougars are present; it is a threat callout, not decoration. -->
+    <div id="cougar-counter" class="threat-count hidden" aria-label="Active cougars">
+      <span id="cougar-count" class="threat-count__value">0</span>
+      <span class="threat-count__label">COUGARS NEARBY</span>
     </div>
 
-    <div class="panel-section">
-      <div class="section-label">Quick Effects</div>
-      <div class="panel-row">
-        <button class="panel-btn btn-effect" data-effect="low_gravity">Low Gravity</button>
-        <button class="panel-btn btn-effect" data-effect="drunk">Drunk</button>
-        <button class="panel-btn btn-effect" data-effect="super_speed">Super Speed</button>
-        <button class="panel-btn btn-effect" data-effect="bouncy_cars">Bouncy Cars</button>
-        <button class="panel-btn btn-effect" data-effect="beyblade">Beyblade</button>
-        <button class="panel-btn btn-effect" data-effect="launch_cars">Launch Cars</button>
-        <button class="panel-btn btn-effect" data-effect="meteor_rain">Meteors</button>
-        <button class="panel-btn btn-effect" data-effect="lsd">LSD</button>
+    <!-- Voting takes priority over lesser status information and stays near the lower centre. -->
+    <section id="vote-panel" class="vote-panel hidden" aria-label="Vote">
+      <header class="vote-panel__header">
+        <span class="vote-panel__title">SQUAD VOTE</span>
+        <span id="vote-time" class="vote-panel__time">0:00</span>
+      </header>
+      <div id="vote-options" class="vote-options"></div>
+    </section>
+
+    <div id="hit-container" class="notice-stack" aria-live="assertive"></div>
+
+    <!-- Full-screen treatment is reserved for mission-state changes. -->
+    <section id="phase-overlay" class="phase-overlay hidden" aria-live="assertive">
+      <div class="phase-overlay__rule"></div>
+      <div id="phase-text" class="phase-overlay__title"></div>
+      <div id="phase-sub" class="phase-overlay__detail"></div>
+    </section>
+
+    <!-- This is deliberately a plain operational tool, kept separate from player presentation. -->
+    <aside id="admin-panel" class="admin-panel hidden" aria-label="Chaos control">
+      <header class="admin-panel__header">
+        <div>
+          <div class="admin-panel__eyebrow">DEVELOPMENT TOOL</div>
+          <h1 class="admin-panel__title">Chaos control</h1>
+        </div>
+        <button id="panel-close" class="icon-button" type="button" aria-label="Close panel">×</button>
+      </header>
+
+      <div class="admin-readout">
+        <div class="readout"><span>State</span><strong id="stat-phase">LOBBY</strong></div>
+        <div class="readout"><span>Difficulty</span><strong id="stat-diff">0%</strong></div>
+        <div class="readout"><span>Cougars</span><strong id="stat-cougars">0</strong></div>
       </div>
-    </div>
 
-    <div class="panel-section">
-      <div class="section-label">Spawn</div>
-      <div class="panel-row">
-        <button class="panel-btn" data-action="spawn_cougar">Spawn Cougar</button>
-        <button class="panel-btn" data-action="spawn_swarm">Spawn Swarm</button>
-        <button class="panel-btn" data-action="spawn_bomber">Spawn Bomber</button>
-        <button class="panel-btn" data-action="kill_cougars">Kill All Cougars</button>
-      </div>
-    </div>
+      <section class="control-group">
+        <h2>Mission</h2>
+        <div class="button-row">
+          <button class="control-button control-button--primary" data-action="start" type="button">Start run</button>
+          <button class="control-button" data-action="pause" type="button">Pause</button>
+          <button class="control-button" data-action="resume" type="button">Resume</button>
+          <button class="control-button control-button--danger" data-action="stop" type="button">Stop</button>
+        </div>
+      </section>
 
-    <div class="panel-section">
-      <div class="section-label">Custom Effect ID</div>
-      <input class="panel-input" id="effect-input" type="text" placeholder="e.g. black_hole, flip_cars, airstrike...">
-    </div>
+      <section class="control-group">
+        <h2>Quick effects</h2>
+        <div class="button-row">
+          <button class="control-button" data-effect="low_gravity" type="button">Low gravity</button>
+          <button class="control-button" data-effect="drunk" type="button">Drunk</button>
+          <button class="control-button" data-effect="super_speed" type="button">Super speed</button>
+          <button class="control-button" data-effect="meteor_rain" type="button">Meteors</button>
+          <button class="control-button" data-effect="beyblade" type="button">Beyblade</button>
+          <button class="control-button" data-effect="lsd" type="button">LSD</button>
+        </div>
+      </section>
 
-    <div class="panel-section">
-      <div class="section-label">Status</div>
-      <div class="panel-stat"><span class="stat-label">Phase</span><span class="stat-value" id="stat-phase">LOBBY</span></div>
-      <div class="panel-stat"><span class="stat-label">Difficulty</span><span class="stat-value" id="stat-diff">0%</span></div>
-      <div class="panel-stat"><span class="stat-label">Cougars</span><span class="stat-value" id="stat-cougars">0</span></div>
-    </div>
-  </div>
+      <section class="control-group">
+        <h2>Spawn</h2>
+        <div class="button-row">
+          <button class="control-button" data-action="spawn_cougar" type="button">Cougar</button>
+          <button class="control-button" data-action="spawn_swarm" type="button">Swarm</button>
+          <button class="control-button" data-action="spawn_bomber" type="button">Bomber</button>
+          <button class="control-button control-button--danger" data-action="kill_cougars" type="button">Clear all</button>
+        </div>
+      </section>
 
-</div>
-<script src="app.js" defer></script>
+      <form id="custom-effect-form" class="custom-effect-form">
+        <label for="effect-input">Effect ID</label>
+        <div>
+          <input id="effect-input" type="text" autocomplete="off" placeholder="e.g. airstrike" />
+          <button class="control-button control-button--primary" type="submit">Run</button>
+        </div>
+      </form>
+    </aside>
+  </main>
+  <script src="app.js"></script>
 </body>
 </html>

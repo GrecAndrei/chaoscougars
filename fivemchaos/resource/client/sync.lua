@@ -1,7 +1,24 @@
-local MyState = {
+-- Shared with spawner.lua so async entity creation can abort cleanly when a
+-- mission ends. This is intentionally one resource-level state object.
+MyState = {
     phase = Phase.LOBBY,
     startTime = 0,
 }
+
+local iAmDowned = false
+local downedTeammates = {}
+local reviveTarget, reviveStartedAt = nil, 0
+
+local function HelpText(text)
+    BeginTextCommandDisplayHelp('STRING')
+    AddTextComponentSubstringPlayerName(text)
+    EndTextCommandDisplayHelp(0, false, false, 1)
+end
+
+local function DrawReviveMarker(pos)
+    DrawMarker(0, pos.x, pos.y, pos.z + 1.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.35, 0.35, 0.35, 235, 55, 55, 185, false, true, 2, false, nil, nil, false)
+end
 
 Citizen.CreateThread(function()
     while not NetworkIsSessionStarted() do
@@ -47,7 +64,14 @@ end)
 
 RegisterNetEvent('cc:mission_start', function(data)
     MyState.phase = Phase.STARTING
+    iAmDowned = false
+    downedTeammates = {}
     local ped = PlayerPedId()
+
+    -- A cancelled player effect must never carry invincibility into a new
+    -- survival run. Reset both native variants before the start teleport.
+    SetPlayerInvincible(PlayerId(), false)
+    SetEntityInvincible(ped, false)
 
     SetEntityCoords(ped, data.start.x, data.start.y, data.start.z, false, false, false, false)
     Citizen.Wait(1000)
@@ -69,6 +93,8 @@ end)
 
 RegisterNetEvent('cc:mission_end', function(data)
     MyState.phase = data.result
+    iAmDowned = false
+    downedTeammates = {}
     SendNUIMessage({type = 'mission_end', result = data.result, detail = data.detail, time = data.time, alive = data.alive})
 end)
 
@@ -95,41 +121,119 @@ Citizen.CreateThread(function()
     end
 end)
 
--- Death detection
+-- Co-op death / downed state. The old automatic solo respawn made teammates
+-- irrelevant. A downed player now stays put until a living teammate performs
+-- a validated revive; a solo run still ends immediately on death server-side.
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(500)
-        if MyState.phase == Phase.RUNNING and IsEntityDead(PlayerPedId()) then
+        if MyState.phase == Phase.RUNNING and not iAmDowned and IsEntityDead(PlayerPedId()) then
+            iAmDowned = true
             TriggerServerEvent('cc:died')
-            Citizen.Wait(3000)
-
-            local respawnPos = Config.Start
-            NetworkResurrectLocalPlayer(respawnPos.x, respawnPos.y, respawnPos.z, 270.0, true, false)
-            Citizen.Wait(500)
-
-            local ped = PlayerPedId()
-            SetEntityCoords(ped, respawnPos.x, respawnPos.y, respawnPos.z, false, false, false, false)
-            SetEntityVisible(ped, true, false)
-            SetEntityInvincible(ped, true)
-            Citizen.Wait(2000)
-            SetEntityInvincible(ped, false)
-
-            local hash = GetHashKey(Config.StartVehicle)
-            RequestModel(hash)
-            local t = 50
-            while not HasModelLoaded(hash) and t > 0 do Citizen.Wait(100); t = t - 1 end
-            if HasModelLoaded(hash) then
-                local veh = CreateVehicle(hash, respawnPos.x, respawnPos.y, respawnPos.z + 1.0, 90.0, true, false)
-                SetVehicleOnGroundProperly(veh)
-                TaskWarpPedIntoVehicle(ped, veh, -1)
-                SetVehicleEngineOn(veh, true, true, false)
-                SetModelAsNoLongerNeeded(hash)
-            end
-
-            TriggerServerEvent('cc:respawned')
-            Citizen.Wait(5000)
         end
     end
+end)
+
+RegisterNetEvent('cc:player_downed', function(serverId, pos)
+    if type(serverId) ~= 'number' or type(pos) ~= 'table' then return end
+    if serverId ~= GetPlayerServerId(PlayerId()) then
+        downedTeammates[serverId] = vector3(pos.x, pos.y, pos.z)
+    end
+    SendNUIMessage({type = 'hit', variant = 'TEAMMATE DOWN!'})
+end)
+
+RegisterNetEvent('cc:player_revived', function(serverId)
+    if type(serverId) == 'number' then downedTeammates[serverId] = nil end
+    SendNUIMessage({type = 'hit', variant = 'PACK REVIVED!'})
+end)
+
+RegisterNetEvent('cc:revived', function(pos)
+    if MyState.phase ~= Phase.RUNNING or type(pos) ~= 'table' then return end
+    local ped = PlayerPedId()
+    iAmDowned = false
+    NetworkResurrectLocalPlayer(pos.x, pos.y, pos.z, GetEntityHeading(ped), true, false)
+    Citizen.Wait(100)
+    ped = PlayerPedId()
+    SetEntityCoords(ped, pos.x, pos.y, pos.z, false, false, false, false)
+    SetEntityHealth(ped, 130)
+    SetEntityVisible(ped, true, false)
+    SetPlayerInvincible(PlayerId(), true)
+    SetEntityInvincible(ped, true)
+    SendNUIMessage({type = 'hit', variant = 'BACK IN THE PACK!'})
+    SetTimeout(Config.ReviveInvulnMs, function()
+        if MyState.phase == Phase.RUNNING and not IsEntityDead(PlayerPedId()) then
+            SetPlayerInvincible(PlayerId(), false)
+            SetEntityInvincible(PlayerPedId(), false)
+        end
+    end)
+    TriggerServerEvent('cc:pos', GetEntityCoords(ped))
+end)
+
+-- In-world rescue interaction. No extra dashboard: a red marker and a held
+-- E prompt appear only beside a downed teammate. The server re-checks every
+-- distance/phase condition before accepting the completed revive.
+Citizen.CreateThread(function()
+    while true do
+        if MyState.phase ~= Phase.RUNNING or iAmDowned then
+            reviveTarget, reviveStartedAt = nil, 0
+            Citizen.Wait(500)
+        else
+            Citizen.Wait(0)
+            local myPos = GetEntityCoords(PlayerPedId())
+            local targetId, targetPos, closest = nil, nil, math.huge
+            for serverId, rememberedPos in pairs(downedTeammates) do
+                local player = GetPlayerFromServerId(serverId)
+                local ped = player ~= -1 and GetPlayerPed(player) or 0
+                local pos = ped ~= 0 and DoesEntityExist(ped) and GetEntityCoords(ped) or rememberedPos
+                local distance = #(myPos - pos)
+                if distance < closest then targetId, targetPos, closest = serverId, pos, distance end
+            end
+
+            if targetId and targetPos then
+                DrawReviveMarker(targetPos)
+                if closest <= Config.ReviveDistance then
+                    local percent = reviveTarget == targetId and math.min(100, math.floor((GetGameTimer() - reviveStartedAt) / Config.ReviveHoldMs * 100)) or 0
+                    HelpText(('Hold ~INPUT_CONTEXT~ to revive teammate (%d%%)'):format(percent))
+                    if IsControlPressed(0, 38) then
+                        if reviveTarget ~= targetId then
+                            reviveTarget, reviveStartedAt = targetId, GetGameTimer()
+                        elseif GetGameTimer() - reviveStartedAt >= Config.ReviveHoldMs then
+                            TriggerServerEvent('cc:revive', targetId)
+                            reviveTarget, reviveStartedAt = nil, 0
+                        end
+                    else
+                        reviveTarget, reviveStartedAt = nil, 0
+                    end
+                else
+                    reviveTarget, reviveStartedAt = nil, 0
+                end
+            else
+                reviveTarget, reviveStartedAt = nil, 0
+            end
+        end
+    end
+end)
+
+-- Pack surge: nearby alive teammates share a small recovery pulse. It is a
+-- nudge toward formation driving, never a shield or a damage bypass.
+local packSurgeGeneration = 0
+RegisterNetEvent('cc:pack_surge', function(nearby)
+    if MyState.phase ~= Phase.RUNNING or iAmDowned then return end
+    nearby = math.max(1, math.min(3, tonumber(nearby) or 1))
+    local ped = PlayerPedId()
+    if IsEntityDead(ped) then return end
+    SetEntityHealth(ped, math.min(200, GetEntityHealth(ped) + Config.PackHealthRestore * nearby))
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if vehicle == 0 or not DoesEntityExist(vehicle) or not NetworkHasControlOfEntity(vehicle) then return end
+    SetVehicleEngineHealth(vehicle, math.min(1000.0, GetVehicleEngineHealth(vehicle) + Config.PackEngineRepair * nearby))
+    packSurgeGeneration = packSurgeGeneration + 1
+    local generation = packSurgeGeneration
+    SetVehicleCheatPowerIncrease(vehicle, 1.08 + nearby * 0.02)
+    SetTimeout(1200, function()
+        if generation == packSurgeGeneration and DoesEntityExist(vehicle) then
+            SetVehicleCheatPowerIncrease(vehicle, 1.0)
+        end
+    end)
 end)
 
 -- Vehicle enforcement

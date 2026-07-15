@@ -1,8 +1,9 @@
-local Chaos = {
+Chaos = {
     active = false,
     timer = 0,
     recentEffects = {},
     activeEffects = {},
+    activeChannels = {},
     maxRecent = 15,
     maxConcurrent = 8,
 }
@@ -13,6 +14,16 @@ local loopRunning = false
 -- again before its previous reset SetTimeout fires, the generation is bumped
 -- and the older SetTimeout becomes a no-op.
 local metaResetGens = {}
+local activeMetaEffects = {}
+local metaSequence = 0
+local META_DEFAULTS = {
+    additionalEffects = 0,
+    durationModifier = 1.0,
+    timerModifier = 1.0,
+    votingMode = 'none',
+    disableChaos = false,
+    hideChaosUI = false,
+}
 
 -- Apply or revert a META effect's server-side state changes. META effects no
 -- longer rely on the client firing cc:meta_set_internal (which now requires
@@ -25,33 +36,76 @@ local metaResetGens = {}
 local function ApplyMetaChange(fx, on)
     if not fx.meta then return end
     if type(fx.meta) ~= 'table' then return end
+
+    if on then
+        metaSequence = metaSequence + 1
+        local values = {}
+        for _, m in ipairs(fx.meta) do
+            if type(m) == 'table' and type(m.key) == 'string' then values[m.key] = m.on end
+        end
+        activeMetaEffects[fx.id] = {sequence = metaSequence, values = values}
+    else
+        activeMetaEffects[fx.id] = nil
+    end
+
+    -- META effects can overlap (for example two timer-speed modifiers).
+    -- Recompute each affected key from the latest active effect instead of
+    -- blindly writing its default when one of the effects ends.
     for _, m in ipairs(fx.meta) do
         if type(m) == 'table' and type(m.key) == 'string' then
-            local value = on and m.on or m.off
-            if State.setMeta then
-                State.setMeta(m.key, value, 'meta_apply')
-            else
-                -- Fallback if security.lua hasn't loaded yet (shouldn't
-                -- happen given fxmanifest load order, but defense in depth).
-                State.meta[m.key] = value
-                if m.key == 'hideChaosUI' then
-                    State.Broadcast('cc:meta_ui', State.meta.hideChaosUI and true or false)
+            local winner, winnerSequence = nil, -1
+            for _, active in pairs(activeMetaEffects) do
+                if active.values[m.key] ~= nil and active.sequence > winnerSequence then
+                    winner = active.values[m.key]
+                    winnerSequence = active.sequence
                 end
             end
+            local value = winner ~= nil and winner or META_DEFAULTS[m.key]
+            if State.setMeta then State.setMeta(m.key, value, 'meta_apply') end
         end
     end
 end
 
 local function CleanActiveEffects()
     local now = os.time()
-    for id, expiry in pairs(Chaos.activeEffects) do
-        if now > expiry then
+    for id, entry in pairs(Chaos.activeEffects) do
+        local expiresAt = type(entry) == 'table' and entry.expiresAt or entry
+        if type(expiresAt) ~= 'number' or now >= expiresAt then
+            if type(entry) == 'table' then
+                for _, channel in ipairs(entry.channels or {}) do
+                    local remaining = (Chaos.activeChannels[channel] or 1) - 1
+                    Chaos.activeChannels[channel] = remaining > 0 and remaining or nil
+                end
+            end
             Chaos.activeEffects[id] = nil
         end
     end
 end
 
-local function DispatchEffect(fx, duration, seed)
+-- Reserve persistent state before broadcasting so an automatic burst and a
+-- manual cc_effect command cannot both start incompatible effects in the
+-- same server tick.  The server is the single arbiter; clients never have to
+-- guess which cleanup routine should win.
+local function ReserveEffect(fx, duration)
+    if fx.instant then return true end
+    CleanActiveEffects()
+    if Effects.ConflictsWithActive(fx, Chaos.activeEffects, Chaos.activeChannels) then
+        print(('[CC] Skipped conflicting effect: %s'):format(fx.id))
+        return false
+    end
+
+    local channels = fx.channels or {}
+    Chaos.activeEffects[fx.id] = {
+        expiresAt = os.time() + duration,
+        channels = channels,
+    }
+    for _, channel in ipairs(channels) do
+        Chaos.activeChannels[channel] = (Chaos.activeChannels[channel] or 0) + 1
+    end
+    return true
+end
+
+local function DispatchEffect(fx, duration, seed, preferredExecutor)
     -- Validate that the effect is real and the fn is a known FX_* name from
     -- the registry. Prevents a malicious admin (or future code path) from
     -- passing an arbitrary global function name to the client, where the
@@ -59,11 +113,11 @@ local function DispatchEffect(fx, duration, seed)
     -- `os.execute` or any other global.
     if not fx or not fx.id or type(fx.id) ~= 'string' then
         print(('[CC] Refused to dispatch effect with bad id (fx=%s)'):format(tostring(fx and fx.id or 'nil')))
-        return
+        return false
     end
     if not Effects._byId or not Effects._byId[fx.id] then
         print(('[CC] Refused to dispatch effect not in registry (id=%s)'):format(fx.id))
-        return
+        return false
     end
     -- Source id/fn from the registry rather than trusting the caller's table.
     -- A caller could construct a fake fx object that shares the id but points
@@ -72,21 +126,21 @@ local function DispatchEffect(fx, duration, seed)
     fx = registered
     if not fx.fn or not Effects._validFns or not Effects._validFns[fx.fn] then
         print(('[CC] Refused to dispatch effect with unknown fn (id=%s)'):format(fx.id))
-        return
+        return false
     end
     if type(duration) ~= 'number' or duration < 0 or duration > 600 then
         print(('[CC] Refused to dispatch effect with bad duration=%s'):format(tostring(duration)))
-        return
+        return false
     end
     if type(seed) ~= 'number' then
         print(('[CC] Refused to dispatch effect with non-number seed=%s'):format(tostring(seed)))
-        return
+        return false
     end
 
     local sync_mode = fx.sync_mode or SyncMode.LOCAL
     if not Effects._validSyncModes or not Effects._validSyncModes[sync_mode] then
         print(('[CC] Refused to dispatch effect with bad sync_mode (id=%s, sync=%s)'):format(fx.id, tostring(sync_mode)))
-        return
+        return false
     end
 
     -- Source the truth from the registry; never trust the caller's instant flag.
@@ -96,8 +150,9 @@ local function DispatchEffect(fx, duration, seed)
     if sync_mode == SyncMode.META then
         if not fx.meta or type(fx.meta) ~= 'table' then
             print(('[CC] Refused to dispatch META effect without meta table (id=%s)'):format(fx.id))
-            return
+            return false
         end
+        if not ReserveEffect(fx, duration) then return false end
         -- Apply server-side meta state BEFORE broadcasting. The client
         -- META effect body becomes a no-op (just `while alive() do wait end`).
         ApplyMetaChange(fx, true)
@@ -114,17 +169,30 @@ local function DispatchEffect(fx, duration, seed)
         State.TrackEffect(fx.id, fx.name, fx.fn, sync_mode, duration, seed, nil)
 
     elseif sync_mode == SyncMode.SPAWN_SINGLE then
-        local executor = State.PickExecutor()
-        if not executor then return end
+        local executor = preferredExecutor
+        if not executor or not State.players[executor] or not State.players[executor].alive then
+            executor = State.PickExecutor()
+        end
+        if not executor then return false end
+        if not ReserveEffect(fx, duration) then return false end
         TriggerClientEvent('cc:trigger_effect', executor, fx.id, fx.name, fx.fn, instant, duration, seed)
         State.TrackEffect(fx.id, fx.name, fx.fn, sync_mode, duration, seed, executor)
 
     else
+        if not ReserveEffect(fx, duration) then return false end
         State.Broadcast('cc:trigger_effect', fx.id, fx.name, fx.fn, instant, duration, seed)
         if not instant then
             State.TrackEffect(fx.id, fx.name, fx.fn, sync_mode, duration, seed, nil)
         end
     end
+    return true
+end
+
+-- Admin controls use this entry point so manual effects receive the exact
+-- same META application, active-effect tracking, and executor rules as the
+-- automatic chaos loop.
+function Chaos.DispatchEffect(fx, duration, seed, preferredExecutor)
+    return DispatchEffect(fx, duration, seed, preferredExecutor)
 end
 
 local function ChaosLoop()
@@ -166,24 +234,19 @@ local function ChaosLoop()
                     local burst = 1 + math.max(0, tonumber(State.meta.additionalEffects or 0) or 0)
                     for _ = 1, burst do
                         if concurrent >= Chaos.maxConcurrent then break end
-                        local fx = Effects.GetRandom(Chaos.recentEffects, Chaos.activeEffects)
+                        local fx = Effects.GetRandom(Chaos.recentEffects, Chaos.activeEffects, Chaos.activeChannels)
                         if not fx then break end
-                        Chaos.recentEffects[fx.id] = true
-
-                        local count = 0
-                        for __ in pairs(Chaos.recentEffects) do count = count + 1 end
-                        if count > Chaos.maxRecent then Chaos.recentEffects = {} end
 
                         local duration = fx.instant and 0 or (fx.short and Config.ShortDuration or Config.EffectDuration)
                         duration = math.max(1, math.floor(duration * (State.meta.durationModifier or 1.0)))
-
-                        if not fx.instant then
-                            Chaos.activeEffects[fx.id] = os.time() + duration
-                            concurrent = concurrent + 1
-                        end
-
                         local seed = math.random(1, 2147483647)
-                        DispatchEffect(fx, duration, seed)
+                        if DispatchEffect(fx, duration, seed) then
+                            Chaos.recentEffects[fx.id] = true
+                            local count = 0
+                            for __ in pairs(Chaos.recentEffects) do count = count + 1 end
+                            if count > Chaos.maxRecent then Chaos.recentEffects = {} end
+                            if not fx.instant then concurrent = concurrent + 1 end
+                        end
                     end
                 end
 
@@ -201,6 +264,8 @@ AddEventHandler('cc:chaos_start', function()
     Chaos.resumeInProgress = false
     Chaos.recentEffects = {}
     Chaos.activeEffects = {}
+    Chaos.activeChannels = {}
+    activeMetaEffects = {}
     ChaosLoop()
     print('[CC] Chaos started; maxRecent=' .. Chaos.maxRecent .. ' maxConcurrent=' .. Chaos.maxConcurrent)
 end)
@@ -209,12 +274,17 @@ AddEventHandler('cc:chaos_stop', function()
     Chaos.active = false
     Chaos.timer = 0
     Chaos.activeEffects = {}
+    Chaos.activeChannels = {}
     Chaos.recentEffects = {}
     Chaos.resumeInProgress = false
     -- Cancel any pending meta reset timers. The SetTimeouts will still fire,
     -- but each will see its generation is no longer current and become a
     -- no-op. This guarantees a clean reset on next mission start.
-    metaResetGens = {}
+    -- Do not reset the generation table.  Reusing generation 1 after a
+    -- stop/start lets an old SetTimeout cancel a newly-dispatched META effect.
+    -- Bump every known generation instead, invalidating every pending timer.
+    for id, gen in pairs(metaResetGens) do metaResetGens[id] = gen + 1 end
+    activeMetaEffects = {}
     State.Broadcast('cc:clear_effects')
     -- Despawn cougars and spawned-ped corpses too. cc:despawn_all_cougars is
     -- also broadcast on mission end (via cc:director_stop), so this is

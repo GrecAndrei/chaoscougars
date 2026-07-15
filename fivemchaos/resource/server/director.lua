@@ -4,9 +4,10 @@
     Distributes spawns across players (not just lead).
 ]]
 
-local Director = {
+Director = {
     active = false,
     cougars = {},
+    spawnRequests = {},
     lastSpawn = 0,
 }
 
@@ -23,7 +24,16 @@ local CougarTypes = {
     {type = 'magnetic',    weight = 6,   minDiff = 0.35},
     {type = 'bomber',      weight = 5,   minDiff = 0.5},
     {type = 'splitter',    weight = 5,   minDiff = 0.45},
+    -- New predators deliberately open up across the run instead of merely
+    -- increasing health pools.  Each one creates a different driving choice.
+    {type = 'pouncer',     weight = 10,  minDiff = 0.2},
+    {type = 'leech',       weight = 7,   minDiff = 0.3},
+    {type = 'howler',      weight = 5,   minDiff = 0.5},
+    {type = 'alpha',       weight = 3,   minDiff = 0.8},
 }
+
+local CougarTypeSet = {}
+for _, entry in ipairs(CougarTypes) do CougarTypeSet[entry.type] = true end
 
 local function PickCougarType()
     local available = {}
@@ -45,10 +55,55 @@ local function PickCougarType()
     return 'fence'
 end
 
-local function CountCougars()
+function Director.CountCougars()
     local n = 0
     for _ in pairs(Director.cougars) do n = n + 1 end
     return n
+end
+local CountCougars = Director.CountCougars
+
+local function IsValidSpawnPos(pos)
+    local posType = type(pos)
+    return (posType == 'table' or posType == 'userdata' or posType == 'vector3')
+        and type(pos.x) == 'number' and pos.x == pos.x and math.abs(pos.x) <= 100000
+        and type(pos.y) == 'number' and pos.y == pos.y and math.abs(pos.y) <= 100000
+        and type(pos.z) == 'number' and pos.z == pos.z and math.abs(pos.z) <= 10000
+end
+
+local function IsNearRequestedPos(actual, expected)
+    local dx, dy, dz = actual.x - expected.x, actual.y - expected.y, actual.z - expected.z
+    return dx * dx + dy * dy + dz * dz <= 2500 -- terrain adjustment / spawn spread
+end
+
+local function SpawnReportQuota(cougarType)
+    if cougarType == 'splitter' then return 7 end
+    if cougarType == 'swarm' then return 5 end
+    return 1
+end
+
+-- A client has to create the networked entity, but it may only report an
+-- entity that the server specifically asked that exact client to create.
+-- Splitters can legitimately create up to seven descendants from one request.
+function Director.QueueSpawn(cougarType, pos, targetId)
+    if type(targetId) ~= 'number' or not State.players[targetId] then return nil end
+    if type(cougarType) ~= 'string' or cougarType == '' or not IsValidSpawnPos(pos) then return nil end
+
+    local requestId
+    repeat
+        requestId = ('%x:%x'):format(math.random(1, 0x7fffffff), GetGameTimer())
+    until not Director.spawnRequests[requestId]
+
+    Director.spawnRequests[requestId] = {
+        targetId = targetId,
+        cougarType = cougarType,
+        pos = {x = pos.x, y = pos.y, z = pos.z},
+        maxReports = SpawnReportQuota(cougarType),
+        reports = 0,
+        active = 0,
+        expiresAt = os.time() + 3600,
+    }
+    TriggerClientEvent('cc:spawn_cougar', -1, cougarType, pos, targetId, requestId)
+    return requestId
 end
 
 -- Pick a random alive player to be the spawn target
@@ -135,6 +190,11 @@ local function DirectorLoop()
             end
 
             local cougarType = PickCougarType()
+            -- A swarm represents five actual hostile entities. Do not let a
+            -- single director tick exceed the configured world threat cap.
+            if CountCougars() + SpawnReportQuota(cougarType) > State.GetMaxCougars() then
+                goto skip
+            end
             Director.lastSpawn = now
 
             -- Broadcast to ALL clients: the target client becomes the owner of
@@ -143,7 +203,7 @@ local function DirectorLoop()
             -- host, which means the spawning client never sees IsOwner()==true
             -- and every owner-gated AI/effect branch never runs -> the cougar
             -- just stands there doing nothing.
-            TriggerClientEvent('cc:spawn_cougar', -1, cougarType, pos, target.id)
+            Director.QueueSpawn(cougarType, pos, target.id)
 
             ::skip::
         end
@@ -168,22 +228,66 @@ local function CleanupLoop()
                     State.Broadcast('cc:cougar_count', CountCougars())
                 end
             end
+            local now = os.time()
+            for requestId, request in pairs(Director.spawnRequests) do
+                if request.expiresAt <= now and request.active == 0 then
+                    Director.spawnRequests[requestId] = nil
+                end
+            end
         end
     end)
 end
 
-RegisterNetEvent('cc:cougar_spawned', function(netId, cougarType, pos)
-    if type(netId) ~= 'number' or netId <= 0 then return end
-    if type(cougarType) ~= 'string' or cougarType == '' then return end
-    Director.cougars[netId] = {type = cougarType, spawnTime = os.time(), pos = pos}
+RegisterNetEvent('cc:cougar_spawned', function(netId, cougarType, pos, requestId)
+    local src = source
+    if type(src) ~= 'number' or not State.players[src] then return end
+    if type(netId) ~= 'number' or netId <= 0 or netId % 1 ~= 0 then return end
+    if type(cougarType) ~= 'string' or cougarType == '' or not IsValidSpawnPos(pos) then return end
+    if type(requestId) ~= 'string' then return end
+    if Director.cougars[netId] then return end
+
+    local request = Director.spawnRequests[requestId]
+    if not request
+        or request.targetId ~= src
+        or request.cougarType ~= cougarType
+        or request.reports >= request.maxReports
+        -- A splitter's descendants are created where their parent dies, so
+        -- only its first report can be tied to the original request point.
+        or (cougarType ~= 'splitter' and not IsNearRequestedPos(pos, request.pos)) then
+        return
+    end
+
+    request.reports = request.reports + 1
+    request.active = request.active + 1
+    Director.cougars[netId] = {type = cougarType, spawnTime = os.time(), pos = pos, owner = src, requestId = requestId}
     State.Broadcast('cc:cougar_count', CountCougars())
 end)
 
 RegisterNetEvent('cc:cougar_dead', function(netId)
-    if type(netId) ~= 'number' or netId <= 0 then return end
-    if not Director.cougars[netId] then return end
+    local src = source
+    if type(src) ~= 'number' or type(netId) ~= 'number' or netId <= 0 or netId % 1 ~= 0 then return end
+    local cougar = Director.cougars[netId]
+    if not cougar or cougar.owner ~= src then return end
     Director.cougars[netId] = nil
+    local request = Director.spawnRequests[cougar.requestId]
+    if request then
+        request.active = math.max(0, request.active - 1)
+        if request.reports >= request.maxReports and request.active == 0 then
+            Director.spawnRequests[cougar.requestId] = nil
+        end
+    end
     State.Broadcast('cc:cougar_count', CountCougars())
+end)
+
+-- Owner clients report live positions every two seconds. This is deliberately
+-- accepted only from the client that the server assigned to create the entity,
+-- so it cannot be used to keep arbitrary cougars alive forever.
+RegisterNetEvent('cc:cougar_pos', function(netId, pos)
+    local src = source
+    if type(src) ~= 'number' or type(netId) ~= 'number' or not IsValidSpawnPos(pos) then return end
+    local cougar = Director.cougars[netId]
+    if not cougar or cougar.owner ~= src then return end
+    cougar.pos = vector3(pos.x, pos.y, pos.z)
 end)
 
 -- Debug command: dump director state
@@ -207,10 +311,40 @@ RegisterCommand('cc_director', function(src)
     end
 end, false)
 
+-- Server-console test hook.  This also makes it possible for an operator to
+-- run a deliberate encounter without needing to wait for the weighted pool.
+-- It shares QueueSpawn with normal spawns, so request ownership and cap
+-- bookkeeping are exercised exactly as they are during a real run.
+RegisterCommand('cc_spawn', function(src, args)
+    if src ~= 0 then return end
+    local cougarType = args[1]
+    if not CougarTypeSet[cougarType] then
+        print('[CC] Usage: cc_spawn <type>')
+        return
+    end
+    if State.phase ~= Phase.RUNNING then
+        print('[CC] Cannot spawn a cougar outside a running mission')
+        return
+    end
+    if CountCougars() + SpawnReportQuota(cougarType) > State.GetMaxCougars() then
+        print('[CC] Spawn cap would be exceeded')
+        return
+    end
+    local target = PickTargetPlayer()
+    local pos = target and GetSpawnPos(target)
+    if not pos then
+        print('[CC] No valid target or spawn position')
+        return
+    end
+    Director.QueueSpawn(cougarType, pos, target.id)
+    print(('[CC] Forced %s encounter for %s'):format(cougarType, GetPlayerName(target.id) or tostring(target.id)))
+end, false)
+
 AddEventHandler('cc:director_start', function()
     if Director.active then return end
     Director.active = true
     Director.cougars = {}
+    Director.spawnRequests = {}
     Director.lastSpawn = 0
     DirectorLoop()
     CleanupLoop()
@@ -220,25 +354,26 @@ AddEventHandler('cc:director_stop', function()
     Director.active = false
     State.Broadcast('cc:despawn_all_cougars', true)
     Director.cougars = {}
+    Director.spawnRequests = {}
 end)
 
--- When a player drops, immediately despawn any cougars that were targeting
--- them so the world doesn't accumulate orphan cougars. Without this, a
--- disconnecting player leaves their cougar fleet on the map for the rest
--- of the round (CleanupLoop only despawns on distance, but the cougar is
--- right where the player was).
+-- When a player drops, immediately despawn the cougars they created. This
+-- deliberately uses the recorded owner instead of State.players[src]: the
+-- State playerDropped handler is registered first and removes that entry
+-- before this handler runs.
 AddEventHandler('playerDropped', function()
     if not Director.active then return end
     local src = source
-    local playerPos = State.players[src] and State.players[src].pos
-    if not playerPos then return end
     local removed = 0
     for netId, cougar in pairs(Director.cougars) do
-        if cougar.pos and #(cougar.pos - playerPos) < Config.SpawnLateral * 2 then
+        if cougar.owner == src then
             State.Broadcast('cc:despawn_cougar', netId)
             Director.cougars[netId] = nil
             removed = removed + 1
         end
+    end
+    for requestId, request in pairs(Director.spawnRequests) do
+        if request.targetId == src then Director.spawnRequests[requestId] = nil end
     end
     if removed > 0 then
         State.Broadcast('cc:cougar_count', CountCougars())

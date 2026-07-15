@@ -632,19 +632,19 @@ function FX_MiscGoToJail(alive)
     SetEntityAsNoLongerNeeded(car)
 end
 
--- sync_mode: VISUAL
+-- sync_mode: LOCAL
 function FX_Lowgravity(alive)
     while alive() do SetGravityLevel(1); Citizen.Wait(0) end
     SetGravityLevel(0)
 end
 
--- sync_mode: VISUAL
+-- sync_mode: LOCAL
 function FX_Verylowgravity(alive)
     while alive() do SetGravityLevel(2); Citizen.Wait(0) end
     SetGravityLevel(0)
 end
 
--- sync_mode: VISUAL
+-- sync_mode: LOCAL
 function FX_Insanegravity(alive)
     while alive() do SetGravityLevel(3); Citizen.Wait(0) end
     SetGravityLevel(0)
@@ -678,7 +678,7 @@ function FX_MiscSidewaysGravity(alive)
     SetGravityLevel(0)
 end
 
--- sync_mode: VISUAL
+-- sync_mode: LOCAL
 function FX_MiscRandomgravity(alive)
     while alive() do
         local g = math.random(1, 3)
@@ -830,7 +830,7 @@ function FX_Meteorrain(alive)
     end
 end
 
--- sync_mode: LOCAL
+-- sync_mode: GLOBAL_OWNED
 function FX_MiscMidas(alive)
     local model = GetHashKey("prop_money_bag_01")
     RequestModel(model)
@@ -1035,7 +1035,7 @@ function FX_MiscPortrait(alive)
     ClearTimecycleModifier()
 end
 
--- sync_mode: VISUAL
+-- sync_mode: LOCAL
 function FX_MiscQuickSprunkStop(alive)
     while alive() do
         SetTimeScale(0.5)
@@ -1117,7 +1117,7 @@ function FX_MiscSolidProps(alive)
     end
 end
 
--- sync_mode: LOCAL
+-- sync_mode: SPAWN_SINGLE
 function FX_MiscSpawnufo(alive)
     local hash = GetHashKey("p_spinning_anus_s")
     local playerPos = GetEntityCoords(PlayerPedId(), false)
@@ -1131,7 +1131,7 @@ function FX_MiscSpawnufo(alive)
     SetModelAsNoLongerNeeded(hash)
 end
 
--- sync_mode: LOCAL
+-- sync_mode: SPAWN_SINGLE
 function FX_MiscSpawnferriswheel(alive)
     local hash = GetHashKey("prop_ld_ferris_wheel")
     local playerPos = GetEntityCoords(PlayerPedId(), false)
@@ -1145,7 +1145,7 @@ function FX_MiscSpawnferriswheel(alive)
     SetModelAsNoLongerNeeded(hash)
 end
 
--- sync_mode: LOCAL
+-- sync_mode: SPAWN_SINGLE
 function FX_MiscSpawnOrangeBall(alive)
     local playerPed = PlayerPedId()
     local pos = GetEntityCoords(playerPed, false)
@@ -2309,7 +2309,7 @@ function FX_PedsMercenaries(alive)
     end
 end
 
--- sync_mode: LOCAL
+-- sync_mode: GLOBAL_OWNED
 function FX_PedsMindmg(alive)
     while alive() do
         SetAiMeleeWeaponDamageModifier(0.1)
@@ -2438,7 +2438,7 @@ function FX_PedsNotMenendez(alive)
     end
 end
 
--- sync_mode: VISUAL
+-- sync_mode: GLOBAL_OWNED
 function FX_PedsObliterate(alive)
     RequestNamedPtfxAsset("scr_xm_orbital")
     RequestNamedPtfxAsset("scr_xm_orbital_blast")
@@ -3591,7 +3591,9 @@ function FX_PlayerFakedeath(alive)
     local lastModeTime = 0
     local nextModeTime = 0
     RequestScriptAudioBank("OFFMISSION_WASTED", false, -1)
-    while currentMode < 4 do
+    -- This effect is timed by effects_runner. Honour its cancellation so a
+    -- fake death cannot leave the player invincible after the effect expires.
+    while alive() and currentMode < 4 do
         Citizen.Wait(0)
         if currentMode > 1 then
             HideHudAndRadarThisFrame()
@@ -3600,7 +3602,7 @@ function FX_PlayerFakedeath(alive)
         if curTime - lastModeTime <= nextModeTime then
             -- still waiting, skip rest
         elseif currentMode == 0 then
-            nextModeTime = 999999
+            nextModeTime = 1000
             lastModeTime = curTime
             currentMode = 1
         elseif currentMode == 1 then
@@ -3609,7 +3611,7 @@ function FX_PlayerFakedeath(alive)
                 if not IsPedInAnyVehicle(playerPed, false) then
                     if IsPedOnFoot(playerPed) and GetPedParachuteState(playerPed) == -1 then
                         RequestAnimDict("mp_suicide")
-                        while not HasAnimDictLoaded("mp_suicide") do Citizen.Wait(0) end
+                        while alive() and not HasAnimDictLoaded("mp_suicide") do Citizen.Wait(0) end
                         GiveWeaponToPed(playerPed, GetHashKey("WEAPON_PISTOL"), 1, true, true)
                         TaskPlayAnim(playerPed, "mp_suicide", "pistol", 8.0, -1.0, 1150, 1, 0.0, false, false, false)
                         nextModeTime = 750
@@ -3620,7 +3622,7 @@ function FX_PlayerFakedeath(alive)
                     local beepTimer = 5000
                     local lastTimestamp = GetGameTimer()
                     local exploding = true
-                    while DoesEntityExist(veh) and exploding do
+                    while alive() and DoesEntityExist(veh) and exploding do
                         Citizen.Wait(0)
                         local curTimestamp = GetGameTimer()
                         detonateTimer = detonateTimer - (curTimestamp - lastTimestamp)
@@ -4143,7 +4145,9 @@ function FX_PlayerRocket(alive)
     local lastTimestamp = GetGameTimer()
     local launchTimer = 5000
     local beepTimer = 5000
-    while true do
+    -- Do not outlive the dispatcher timer. The old infinite loop kept the
+    -- player invincible forever when the effect was cancelled or restarted.
+    while alive() and launchTimer > 0 do
         SetEntityInvincible(playerPed, true)
         local curTimestamp = GetGameTimer()
         launchTimer = launchTimer - (curTimestamp - lastTimestamp)
@@ -4165,6 +4169,8 @@ function FX_PlayerRocket(alive)
         end
         Citizen.Wait(0)
     end
+    SetEntityInvincible(playerPed, false)
+    SetPlayerInvincible(PlayerId(), false)
 end
 
 -- sync_mode: LOCAL
@@ -5183,22 +5189,38 @@ end
 
 -- sync_mode: VISUAL
 function FX_TimeMorning(alive)
-    SetClockTime(8, 0, 0)
+    while alive() do
+        NetworkOverrideClockTime(8, 0, 0)
+        Citizen.Wait(1000)
+    end
+    NetworkClearClockTimeOverride()
 end
 
 -- sync_mode: VISUAL
 function FX_TimeDay(alive)
-    SetClockTime(12, 0, 0)
+    while alive() do
+        NetworkOverrideClockTime(12, 0, 0)
+        Citizen.Wait(1000)
+    end
+    NetworkClearClockTimeOverride()
 end
 
 -- sync_mode: VISUAL
 function FX_TimeEvening(alive)
-    SetClockTime(18, 0, 0)
+    while alive() do
+        NetworkOverrideClockTime(18, 0, 0)
+        Citizen.Wait(1000)
+    end
+    NetworkClearClockTimeOverride()
 end
 
 -- sync_mode: VISUAL
 function FX_TimeNight(alive)
-    SetClockTime(0, 0, 0)
+    while alive() do
+        NetworkOverrideClockTime(0, 0, 0)
+        Citizen.Wait(1000)
+    end
+    NetworkClearClockTimeOverride()
 end
 
 -- sync_mode: VISUAL
@@ -5211,10 +5233,14 @@ end
 
 -- sync_mode: VISUAL
 function FX_TimeLocalTime(alive)
-    NetworkClockTimeOverride(GetClockHours(), GetClockMinutes(), GetClockSeconds(), 0, true)
+    while alive() do
+        NetworkOverrideClockTime(GetClockHours(), GetClockMinutes(), GetClockSeconds())
+        Citizen.Wait(1000)
+    end
+    NetworkClearClockTimeOverride()
 end
 
--- sync_mode: VISUAL
+-- sync_mode: LOCAL
 function FX_TimeX02(alive)
     while alive() do
         SetAudioFlag("AllowScriptedSpeechInSlowMo", true)
@@ -5227,7 +5253,7 @@ function FX_TimeX02(alive)
     SetTimeScale(1.0)
 end
 
--- sync_mode: VISUAL
+-- sync_mode: LOCAL
 function FX_TimeX05(alive)
     while alive() do
         SetAudioFlag("AllowScriptedSpeechInSlowMo", true)
@@ -5240,7 +5266,7 @@ function FX_TimeX05(alive)
     SetTimeScale(1.0)
 end
 
--- sync_mode: VISUAL
+-- sync_mode: LOCAL
 function FX_TimeSuperhot(alive)
     local lastCheck = 0
     while alive() do
@@ -5729,7 +5755,7 @@ function FX_VehsGhost(alive)
     end)
 end
 
--- sync_mode: SPAWN_SINGLE
+-- sync_mode: LOCAL
 function FX_VehJesustakethewheel(alive)
     local playerPed = PlayerPedId()
     local playerPos = GetEntityCoords(playerPed, true)
@@ -6002,7 +6028,7 @@ function FX_MiscReplacevehicle(alive)
     end
 end
 
--- sync_mode: SPAWN_SINGLE
+-- sync_mode: LOCAL
 function FX_VehRepossession(alive)
     local playerPed = PlayerPedId()
 
@@ -6561,27 +6587,47 @@ end
 
 -- sync_mode: VISUAL
 function FX_WeatherExtrasunny(alive)
-    SetWeatherTypeNow("EXTRASUNNY")
+    while alive() do
+        SetWeatherTypeNowPersist("EXTRASUNNY")
+        Citizen.Wait(1000)
+    end
+    ClearWeatherTypePersist()
 end
 
 -- sync_mode: VISUAL
 function FX_WeatherStormy(alive)
-    SetWeatherTypeNow("THUNDER")
+    while alive() do
+        SetWeatherTypeNowPersist("THUNDER")
+        Citizen.Wait(1000)
+    end
+    ClearWeatherTypePersist()
 end
 
 -- sync_mode: VISUAL
 function FX_WeatherFoggy(alive)
-    SetWeatherTypeNow("FOGGY")
+    while alive() do
+        SetWeatherTypeNowPersist("FOGGY")
+        Citizen.Wait(1000)
+    end
+    ClearWeatherTypePersist()
 end
 
 -- sync_mode: VISUAL
 function FX_WeatherNeutral(alive)
-    SetWeatherTypeNow("NEUTRAL")
+    while alive() do
+        SetWeatherTypeNowPersist("NEUTRAL")
+        Citizen.Wait(1000)
+    end
+    ClearWeatherTypePersist()
 end
 
 -- sync_mode: VISUAL
 function FX_WeatherSnowy(alive)
-    SetWeatherTypeNow("XMAS")
+    while alive() do
+        SetWeatherTypeNowPersist("XMAS")
+        Citizen.Wait(1000)
+    end
+    ClearWeatherTypePersist()
 end
 
 -- sync_mode: VISUAL
@@ -6597,9 +6643,9 @@ end
 -- sync_mode: VISUAL
 function FX_WorldSnow(alive)
     while alive() do
-        SetWeatherTypeNow("XMAS")
-        Citizen.Wait(500)
+        SetWeatherTypeNowPersist("XMAS")
+        Citizen.Wait(1000)
     end
-    SetWeatherTypeNow("EXTRASUNNY")
+    ClearWeatherTypePersist()
 end
 

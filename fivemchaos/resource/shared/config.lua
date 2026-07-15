@@ -11,6 +11,18 @@ Config.MaxPlayers = 4
 Config.MinSurvivors = 1
 Config.StartVehicle = 'kuruma2'
 
+-- Co-op / pack play. A dead survivor stays down long enough for the squad to
+-- reach them; grouping up also grants small, periodic recovery instead of a
+-- permanent stat buff.
+Config.ReviveDistance = 7.0
+Config.ReviveHoldMs = 2500
+Config.ReviveWindowSec = 35
+Config.ReviveInvulnMs = 4000
+Config.PackRadius = 40.0
+Config.PackSurgeIntervalMs = 3000
+Config.PackEngineRepair = 18.0
+Config.PackHealthRestore = 4
+
 -- Chaos timing (gets faster as you progress)
 Config.ChaosIntervalBase = 20       -- seconds at start
 Config.ChaosIntervalMin = 8         -- minimum at end

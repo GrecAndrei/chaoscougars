@@ -13,12 +13,36 @@ local lastVoteAt = {}
 -- expiry timer can settle, and the broadcast storms every client.
 local VOTE_COOLDOWN_MS = 750
 
+local function VoteThreshold()
+    local alive = math.max(1, State.AliveCount())
+    if State.meta.votingMode == 'majority' then
+        return math.floor(alive / 2) + 1
+    end
+    if State.meta.votingMode == 'antimajority' then
+        return 1
+    end
+    -- A one-player run must still be pausable even though the default
+    -- multiplayer threshold is two.
+    return math.min(Config.PauseThreshold, alive)
+end
+
+local function ClearVotes()
+    votes = {}
+    voteExpiry = {}
+    State.Broadcast('cc:vote_end')
+end
+
+AddEventHandler('cc:chaos_start', ClearVotes)
+AddEventHandler('cc:chaos_stop', ClearVotes)
+
 RegisterNetEvent('cc:vote_pause', function()
     local src = source
     -- Validate the source is a real connected player (defense against
     -- spoofed NetEvents from REPL or other resources).
     if type(src) ~= 'number' or src < 1 then return end
     if not GetPlayerName(src) then return end
+    if not State.players[src] then return end
+    if State.phase ~= Phase.RUNNING and State.phase ~= Phase.PAUSED then return end
 
     local now = GetGameTimer()
     if lastVoteAt[src] and (now - lastVoteAt[src]) < VOTE_COOLDOWN_MS then
@@ -37,9 +61,10 @@ RegisterNetEvent('cc:vote_pause', function()
     local count = 0
     for _ in pairs(votes) do count = count + 1 end
 
-    State.Broadcast('cc:vote_update', count, Config.PauseThreshold)
+    local threshold = VoteThreshold()
+    State.Broadcast('cc:vote_update', count, threshold)
 
-    if count >= Config.PauseThreshold then
+    if count >= threshold then
         if State.phase == 'RUNNING' then
             PauseMission(true)
         elseif State.phase == 'PAUSED' then
@@ -70,7 +95,7 @@ Citizen.CreateThread(function()
             if count == 0 then
                 State.Broadcast('cc:vote_end')
             else
-                State.Broadcast('cc:vote_update', count, Config.PauseThreshold)
+                State.Broadcast('cc:vote_update', count, VoteThreshold())
             end
         end
     end

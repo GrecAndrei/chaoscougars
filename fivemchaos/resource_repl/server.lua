@@ -14,6 +14,31 @@
 local LOG = {}
 local MAX_LOG = 200
 
+-- The main mod runs in a SEPARATE Lua VM: its State/Config/Effects globals
+-- were never visible here (they read as nil). All game access goes through
+-- the fivemchaos exports declared in its fxmanifest.
+local CC_RESOURCE = 'fivemchaos'
+
+local function ccCall(exportName, ...)
+    local args = {...}
+    local ok, result = pcall(function()
+        return exports[CC_RESOURCE][exportName](nil, table.unpack(args))
+    end)
+    if not ok then return nil, 'fivemchaos not running or export failed: ' .. tostring(result) end
+    return result
+end
+
+-- Telemetry from clients (position, speed, etc.). Declared BEFORE the HTTP
+-- handler closure below — it used to be declared after, so /telemetry
+-- captured a nil global and always returned null.
+local telemetry = {}
+RegisterNetEvent('cc_repl:telemetry', function(data)
+    if type(data) ~= 'table' then return end
+    telemetry[source] = data
+    telemetry[source].name = GetPlayerName(source)
+    telemetry[source].time = os.time()
+end)
+
 local function AddLog(category, msg)
     LOG[#LOG + 1] = {
         time = os.time(),
@@ -40,9 +65,21 @@ local function ExecLua(code)
         print = function(...)
             output[#output + 1] = CapturePrint(...)
         end,
-        State = State,
-        Config = Config,
-        Effects = Effects,
+        -- Game access helpers (exports-backed; the old `State = State` style
+        -- bindings were always nil across the resource boundary):
+        --   cc.state()          -> phase/difficulty/players/meta/heat
+        --   cc.effects()        -> active effect list
+        --   cc.effect(id)       -> registry entry
+        --   cc.director()       -> cougar snapshot
+        --   cc.dispatch(id[,d]) -> fire an effect through the real pipeline
+        cc = {
+            state    = function() return ccCall('GetState') end,
+            effects  = function() return ccCall('GetActiveEffects') end,
+            effect   = function(id) return ccCall('GetEffectById', id) end,
+            director = function() return ccCall('GetDirectorSnapshot') end,
+            dispatch = function(id, duration) return ccCall('DispatchEffectById', id, duration) end,
+        },
+        json = json,
     }, {__index = _G})
 
     local fn, err = load(code, '=repl', 't', env)
@@ -143,9 +180,13 @@ SetHttpHandler(function(req, res)
     -- `chaoscougar_dev_token` in server.cfg to enable any endpoint.
     if path == '/status' and method == 'GET' then
         if not isDev() then deny('dev token required'); return end
+        local gameState = ccCall('GetState')
         local status = {
-            phase = State and State.phase or 'unknown',
-            difficulty = State and State.difficulty or 0,
+            phase = gameState and gameState.phase or 'unknown',
+            difficulty = gameState and gameState.difficulty or 0,
+            heat = gameState and gameState.heat or 0,
+            act = gameState and gameState.actIndex or 0,
+            alive = gameState and gameState.aliveCount or 0,
             playerCount = #GetPlayers(),
             uptime = os.time(),
         }
@@ -278,15 +319,10 @@ SetHttpHandler(function(req, res)
     res.send(json.encode({ok = false, error = 'unknown endpoint: ' .. path}))
 end)
 
--- Telemetry from clients (position, speed, etc.)
-local telemetry = {}
-RegisterNetEvent('cc_repl:telemetry', function(data)
-    telemetry[source] = data
-    telemetry[source].name = GetPlayerName(source)
-    telemetry[source].time = os.time()
-end)
-
 -- Force-trigger an effect by ID (for testing from CLI). Gated on dev ACE.
+-- Routed through the fivemchaos DispatchEffectById export so it uses the
+-- real dispatch pipeline (the old fallback hand-rolled a cc:trigger_effect
+-- with the wrong argument order and silently no-oped).
 RegisterNetEvent('cc:force_effect', function(effectId)
     if type(source) ~= 'number' or source < 1 then return end
     if not IsPlayerAceAllowed(source, 'chaoscougar.dev') then
@@ -295,26 +331,15 @@ RegisterNetEvent('cc:force_effect', function(effectId)
         return
     end
     if type(effectId) ~= 'string' or effectId == '' then return end
-    if not Effects then
-        AddLog('repl', 'Effects table not available (main resource not running?)')
-        return
-    end
-    local effect = Effects.FindById(effectId)
-    if not effect then
-        AddLog('repl', 'Effect not found: ' .. tostring(effectId))
-        return
-    end
-    AddLog('repl', 'Force-triggering effect: ' .. effect.name)
-    -- Use the chaos dispatch if available
-    if DispatchEffect then
-        DispatchEffect(effect)
+    local dispatched, err = ccCall('DispatchEffectById', effectId)
+    if err then
+        AddLog('repl', 'force_effect failed: ' .. err)
+    elseif dispatched then
+        AddLog('repl', 'Force-triggered effect: ' .. effectId)
     else
-        TriggerClientEvent('cc:trigger_effect', -1, effect.id, effect.sync_mode, 30, os.time())
+        AddLog('repl', 'Effect refused (unknown id or conflict): ' .. tostring(effectId))
     end
 end)
-
--- GET /telemetry endpoint
--- (handled in the main HTTP handler below, adding here for the log)
 
 AddLog('system', 'CC REPL server started')
 print('^2[CC-REPL]^0 HTTP REPL bridge active. Use curl http://localhost:30120/cc_repl/exec')

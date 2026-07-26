@@ -410,21 +410,8 @@ function FX_PedsLevitate(alive)
     end
 end
 
-function FX_PedsDance(alive)
-    while alive() do
-        OwnershipGuard.ForEachOwnedPed(function(p)
-            if not IsPedInAnyVehicle(p, true) and not IsEntityDead(p) and not IsPedUsingAnyScenario(p) then
-                TaskStartScenarioInPlace(p, 'WORLD_HUMAN_MUSICIAN', 0, true)
-                SetPedKeepTask(p, true)
-            end
-        end)
-        Citizen.Wait(2000)
-    end
-    OwnershipGuard.ForEachOwnedPed(function(p)
-        ClearPedTasks(p)
-        SetPedKeepTask(p, false)
-    end)
-end
+-- FX_PedsDance lives in effects_generated.lua (loads after this file; the
+-- duplicate that used to be here was dead code shadowed by load order).
 
 -- === NEW: MISC WORLD ===
 

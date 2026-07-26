@@ -18,23 +18,9 @@ function FX_MetaDuration2x(alive)
     MetaSetInternal('durationModifier', 1.0)
 end
 
-function FX_MetaTimerspeed05x(alive)
-    MetaSetInternal('timerModifier', 0.5)
-    while alive() do Citizen.Wait(250) end
-    MetaSetInternal('timerModifier', 1.0)
-end
-
-function FX_MetaTimerspeed2x(alive)
-    MetaSetInternal('timerModifier', 2.0)
-    while alive() do Citizen.Wait(250) end
-    MetaSetInternal('timerModifier', 1.0)
-end
-
-function FX_MetaTimerspeed5x(alive)
-    MetaSetInternal('timerModifier', 5.0)
-    while alive() do Citizen.Wait(250) end
-    MetaSetInternal('timerModifier', 1.0)
-end
+-- FX_MetaTimerspeed05x / 2x / 5x live in effects_generated.lua (loads after
+-- this file). The duplicates that used to be here were dead code shadowed by
+-- load order; both registries point at the generated definitions.
 
 function FX_MetaNoChaos(alive)
     MetaSetInternal('disableChaos', true)

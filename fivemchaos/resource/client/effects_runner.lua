@@ -17,7 +17,11 @@ RegisterNetEvent('cc:trigger_effect', function(id, name, fnName, instant, durati
     if type(fnName) ~= 'string' or fnName == '' then return end
 
     local fx = Effects.FindById(id)
-    SendNUIMessage({type = 'effect', id = id, name = name, duration = instant and 0 or duration})
+    local severity = (fx and fx.severity) or 2
+    SendNUIMessage({type = 'effect', id = id, name = name, duration = instant and 0 or duration, severity = severity})
+    -- Center-screen announcement: chaos mods live on the "oh no" moment.
+    -- app.js suppresses this while the hide-UI meta effect is active.
+    SendNUIMessage({type = 'effect_splash', name = name, severity = severity})
 
     local fn = _G[fnName]
     if not fn then return end
@@ -74,7 +78,9 @@ RegisterNetEvent('cc:late_join_sync', function(snapshot, difficulty, meta, couga
             local remaining = entry.remainingDuration or 0
             if remaining <= 0 then goto continue end
 
-            SendNUIMessage({type = 'effect', id = entry.id, name = entry.name or entry.id, duration = remaining})
+            local fx = Effects.FindById(entry.id)
+            SendNUIMessage({type = 'effect', id = entry.id, name = entry.name or entry.id,
+                duration = remaining, severity = (fx and fx.severity) or 2})
 
             local running = true
             local cancel = function() running = false end

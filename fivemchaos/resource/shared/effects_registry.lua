@@ -280,6 +280,20 @@ function Effects.AssignChannels(fx)
     return channels
 end
 
+-- How many effects may hold a channel simultaneously. The state.* channels
+-- guard actual native-state collisions (gravity, timescale, weather...) and
+-- stay exclusive. The blanket scope.* locks were belt-and-suspenders that
+-- capped the whole mode at ~4 concurrent persistent effects — with 500+
+-- effects in the pool, players saw almost none of them overlap. Two per
+-- scope doubles the on-screen variety while every known real conflict is
+-- still covered by its state channel.
+local CHANNEL_CAPACITY = {
+    ['scope.local'] = 2,
+    ['scope.visual'] = 2,
+    ['scope.world'] = 2,
+    -- scope.spawn stays exclusive: two simultaneous spawn waves is ped soup.
+}
+
 function Effects.ConflictsWithActive(fx, activeIds, activeChannels)
     activeIds = activeIds or {}
     activeChannels = activeChannels or {}
@@ -296,18 +310,27 @@ function Effects.ConflictsWithActive(fx, activeIds, activeChannels)
         if activeIds[incompatible] then return true end
     end
     for _, channel in ipairs(fx.channels or {}) do
-        if (activeChannels[channel] or 0) > 0 then return true end
+        if (activeChannels[channel] or 0) >= (CHANNEL_CAPACITY[channel] or 1) then return true end
     end
     return false
 end
 
-function Effects.GetRandom(usedRecently, activeIds, activeChannels)
+-- opts (all optional):
+--   maxSeverity - heat director cap; effects with fx.severity above this
+--                 are excluded from the roll (1=mild, 2=medium, 3=spicy)
+--   blockCrowd  - exclude fx.needsCrowd effects (ambient-ped effects fire
+--                 into a vacuum on the empty country stretches)
+function Effects.GetRandom(usedRecently, activeIds, activeChannels, opts)
     usedRecently = usedRecently or {}
     activeIds = activeIds or {}
+    opts = opts or {}
 
     local candidates = {}
     for _, fx in ipairs(Effects.Pool) do
-        if not fx.runDisabled and not usedRecently[fx.id] and not Effects.ConflictsWithActive(fx, activeIds, activeChannels) then
+        if not fx.runDisabled and not usedRecently[fx.id]
+            and (not opts.maxSeverity or (fx.severity or 2) <= opts.maxSeverity)
+            and (not opts.blockCrowd or not fx.needsCrowd)
+            and not Effects.ConflictsWithActive(fx, activeIds, activeChannels) then
                 local w = fx.weight or 10
                 for i = 1, w do
                     candidates[#candidates + 1] = fx

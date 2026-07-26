@@ -47,6 +47,12 @@ Config.DifficultyExponent = 1.5     -- curve (>1 = backloaded)
 Config.PauseThreshold = 2
 Config.VoteWindowSec = 5
 
+-- Squad effect voting: when the chaos timer expires with 2+ players, the
+-- squad picks between 3 candidate effects instead of the server rolling in
+-- private. META effect votingMode='chaos' forces this on even when false.
+Config.VoteEffects = true
+Config.VoteEffectWindowSec = 8
+
 -- Banned vehicle classes
 Config.BannedClasses = {
     [14] = true,

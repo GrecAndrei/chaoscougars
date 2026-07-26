@@ -5474,12 +5474,18 @@ end
 
 -- sync_mode: GLOBAL_OWNED
 function FX_VehsPink(alive)
-    OwnershipGuard.ForEachOwnedVehicle(function(veh)
-        if DoesEntityExist(veh) then
-            SetVehicleCustomPrimaryColour(veh, 255, 105, 180)
-            SetVehicleCustomSecondaryColour(veh, 255, 105, 180)
-        end
-    end)
+    -- Loop like the other traffic-color effects so vehicles that stream in
+    -- during the effect get painted too (the one-shot version held the
+    -- world scope lock for 45s while doing nothing).
+    while alive() do
+        OwnershipGuard.ForEachOwnedVehicle(function(veh)
+            if DoesEntityExist(veh) then
+                SetVehicleCustomPrimaryColour(veh, 255, 105, 180)
+                SetVehicleCustomSecondaryColour(veh, 255, 105, 180)
+            end
+        end)
+        Citizen.Wait(500)
+    end
 end
 
 -- sync_mode: GLOBAL_OWNED

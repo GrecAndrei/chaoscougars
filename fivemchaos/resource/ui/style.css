@@ -132,10 +132,106 @@ button { cursor: pointer; }
   white-space: nowrap;
 }
 @keyframes notice { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.notice--threat { border-left-color: var(--red); color: var(--red); font-size: 15px; letter-spacing: .08em; }
+.notice--record { border-left-color: var(--green); color: var(--green); font-size: 19px; letter-spacing: .1em; }
+
+/* Effect splash: brief center-screen announcement when an effect fires */
+.effect-splash {
+  position: fixed;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 76vw;
+  color: var(--yellow);
+  font-size: clamp(26px, 3.6vw, 44px);
+  letter-spacing: .1em;
+  text-align: center;
+  text-shadow: 0 3px 9px rgba(0,0,0,.72);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.effect-splash--spicy { color: var(--red); }
+.effect-splash.pop { animation: splash-pop 1.5s ease-out forwards; }
+@keyframes splash-pop {
+  0% { opacity: 0; transform: translateX(-50%) scale(1.25); }
+  12% { opacity: 1; transform: translateX(-50%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Countdown: GO treatment without the auto-fade */
+.phase-overlay.counting { background: transparent; }
+.phase-overlay.counting .phase-overlay__title { color: var(--yellow); font-size: clamp(56px, 9vw, 120px); }
+.phase-overlay.counting .phase-overlay__rule { background: var(--yellow); }
+/* Pride chip: pack-bonus indicator, mirrors the threat counter styling */
+.pride-chip {
+  position: fixed;
+  left: 28px;
+  bottom: 34px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 11px;
+  background: var(--paper-soft);
+  border-bottom: 2px solid var(--green);
+  box-shadow: 0 4px 13px rgba(0,0,0,.28);
+  transition: opacity .3s ease;
+}
+.pride-chip__label { color: var(--muted); font-size: 10px; letter-spacing: .12em; }
+.pride-chip__value { color: var(--green); font-family: var(--mono); font-size: 24px; line-height: 1; letter-spacing: -.06em; }
+.pride-chip.fading { opacity: 0; }
+
+/* Bleed-out clock: the downed player's whole world for up to 35 seconds */
+.bleedout {
+  position: fixed;
+  left: 50%;
+  bottom: 22vh;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  padding: 15px 26px 14px;
+  background: rgba(46, 9, 8, .88);
+  border-top: 3px solid var(--red);
+  box-shadow: 0 10px 34px rgba(0,0,0,.55);
+  text-align: center;
+}
+.bleedout__title { color: var(--red); font-size: 13px; letter-spacing: .2em; }
+.bleedout__time { margin-top: 4px; color: var(--ink); font-family: var(--mono); font-size: 38px; line-height: 1; letter-spacing: -.04em; animation: alarm .8s steps(2, end) infinite; }
+.bleedout__sub { margin-top: 7px; color: var(--muted); font-size: 10px; letter-spacing: .16em; }
+
+/* Act banner: run-structure announcements (distinct from chaos noise) */
+.act-banner {
+  position: fixed;
+  top: 16%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  animation: act-in .35s ease-out;
+}
+.act-banner.leaving { animation: act-out .4s ease-in forwards; }
+.act-banner__rule { width: 44px; height: 3px; margin-bottom: 11px; background: var(--yellow); }
+.act-banner__name {
+  color: var(--ink);
+  font-size: clamp(30px, 4.4vw, 54px);
+  line-height: .95;
+  letter-spacing: .12em;
+  text-shadow: 0 3px 8px rgba(0,0,0,.66);
+  text-transform: uppercase;
+}
+.act-banner__sub { margin-top: 9px; color: var(--yellow); font-size: 12px; letter-spacing: .18em; text-shadow: 0 2px 5px #000; text-transform: uppercase; }
+@keyframes act-in { from { opacity: 0; transform: translate(-50%, -14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes act-out { to { opacity: 0; transform: translate(-50%, 10px); } }
+
 .phase-overlay { position: fixed; inset: 0; display: grid; align-content: center; justify-items: center; padding-bottom: 8vh; background: rgba(0,0,0,.15); text-align: center; }
 .phase-overlay__rule { width: 52px; height: 3px; margin-bottom: 14px; background: var(--yellow); }
 .phase-overlay__title { color: var(--ink); font-size: clamp(42px, 7vw, 88px); line-height: .9; letter-spacing: .09em; text-shadow: 0 3px 8px rgba(0,0,0,.62); }
 .phase-overlay__detail { max-width: 70vw; margin-top: 13px; color: var(--ink); font-size: 13px; letter-spacing: .13em; text-shadow: 0 2px 5px #000; text-transform: uppercase; }
+.phase-overlay__history { max-width: 70vw; margin-top: 9px; color: var(--muted); font-size: 11px; letter-spacing: .14em; text-shadow: 0 2px 5px #000; text-transform: uppercase; }
+.phase-overlay.counting .phase-overlay__history, .phase-overlay.go .phase-overlay__history { display: none; }
 .phase-overlay.lobby { background: rgba(0,0,0,.34); }
 .phase-overlay.lobby .phase-overlay__title { font-size: clamp(24px, 3vw, 38px); }
 .phase-overlay.won .phase-overlay__rule { background: var(--green); }

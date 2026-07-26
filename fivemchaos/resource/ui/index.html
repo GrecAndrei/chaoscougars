@@ -10,7 +10,7 @@
   <main id="hud" class="hud" aria-live="polite">
     <!-- Mission status: intentionally the only persistent top-left element. -->
     <section id="timer-bar" class="mission-clock hidden" aria-label="Time until next chaos event">
-      <div class="mission-clock__eyebrow">CHAOS RUN <span class="mission-clock__divider">/</span> NEXT EVENT</div>
+      <div class="mission-clock__eyebrow">CHAOS RUN <span class="mission-clock__divider">/</span> NEXT EVENT <span class="mission-clock__divider">/</span> ROUTE <span id="route-pct">0%</span></div>
       <div class="mission-clock__row">
         <span id="timer-label" class="mission-clock__time">--:--</span>
         <div class="mission-clock__track"><div id="timer-fill" class="mission-clock__fill"></div></div>
@@ -29,6 +29,19 @@
       <span class="threat-count__label">COUGARS NEARBY</span>
     </div>
 
+    <!-- Pack bonus: visible so players learn to drive in formation. -->
+    <div id="pride-chip" class="pride-chip hidden" aria-label="Pack bonus active">
+      <span class="pride-chip__label">PRIDE</span>
+      <span id="pride-count" class="pride-chip__value">×2</span>
+    </div>
+
+    <!-- Downed player's own bleed-out clock. -->
+    <div id="bleedout" class="bleedout hidden" aria-live="assertive">
+      <div class="bleedout__title">BLEEDING OUT</div>
+      <div id="bleedout-time" class="bleedout__time">0:35</div>
+      <div class="bleedout__sub">HOLD ON — THE PACK IS COMING</div>
+    </div>
+
     <!-- Voting takes priority over lesser status information and stays near the lower centre. -->
     <section id="vote-panel" class="vote-panel hidden" aria-label="Vote">
       <header class="vote-panel__header">
@@ -40,11 +53,22 @@
 
     <div id="hit-container" class="notice-stack" aria-live="assertive"></div>
 
+    <!-- Center-screen effect announcement: the "oh no" moment. -->
+    <div id="effect-splash" class="effect-splash hidden" aria-live="polite"></div>
+
+    <!-- Act transitions: brief top-band announcement of run structure. -->
+    <div id="act-banner" class="act-banner hidden" aria-live="polite">
+      <div class="act-banner__rule"></div>
+      <div id="act-name" class="act-banner__name"></div>
+      <div id="act-sub" class="act-banner__sub"></div>
+    </div>
+
     <!-- Full-screen treatment is reserved for mission-state changes. -->
     <section id="phase-overlay" class="phase-overlay hidden" aria-live="assertive">
       <div class="phase-overlay__rule"></div>
       <div id="phase-text" class="phase-overlay__title"></div>
       <div id="phase-sub" class="phase-overlay__detail"></div>
+      <div id="phase-history" class="phase-overlay__history"></div>
     </section>
 
     <!-- This is deliberately a plain operational tool, kept separate from player presentation. -->

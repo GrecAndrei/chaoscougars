@@ -2,30 +2,45 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'ChaosCougar'
-description 'Chaos Mod survival run: LSIA to Paleto Bay, 4-player co-op'
-version '0.4.0'
+description 'Chaos Run: LSIA to Paleto Bay — heat-paced chaos, cougar director, squad voting, 4-player co-op'
+version '0.5.0'
 
 shared_scripts {
     'shared/enums.lua',
     'shared/config.lua',
     'shared/effects_registry.lua',
     'shared/effects_generated_registry.lua',
+    'shared/effects_tuning.lua',
 }
 
 server_scripts {
     'server/state.lua',
     'server/security.lua',
     'server/late_join.lua',
+    'server/heat.lua',
     'server/director.lua',
     'server/chaos.lua',
+    'server/effect_vote.lua',
+    'server/lobby.lua',
     'server/admin.lua',
     'server/voting.lua',
+    'server/records.lua',
+    'server/exports_api.lua',
+}
+
+server_exports {
+    'GetState',
+    'GetActiveEffects',
+    'GetDirectorSnapshot',
+    'GetEffectById',
+    'DispatchEffectById',
 }
 
 client_scripts {
     'client/ownership.lua',
     'client/effects_runner.lua',
     'client/sync.lua',
+    'client/vote.lua',
     'client/spawner.lua',
     'client/panel.lua',
     'client/effects_local.lua',
@@ -57,6 +72,13 @@ client_event 'cc:revived'
 client_event 'cc:pack_surge'
 client_event 'cc:difficulty'
 client_event 'cc:meta_ui'
+client_event 'cc:act'
+client_event 'cc:bleedout'
+client_event 'cc:ready_count'
+client_event 'cc:effect_vote'
+client_event 'cc:effect_vote_update'
+client_event 'cc:records'
+client_event 'cc:new_record'
 
 server_event 'cc:join'
 server_event 'cc:pos'
@@ -78,6 +100,8 @@ server_event 'cc:admin_pause'
 server_event 'cc:admin_effect'
 server_event 'cc:admin_spawn_cougar'
 server_event 'cc:admin_kill_cougars'
+server_event 'cc:ready'
+server_event 'cc:effect_vote_cast'
 
 ui_page 'ui/index.html'
 

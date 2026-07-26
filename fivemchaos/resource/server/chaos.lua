@@ -185,6 +185,7 @@ local function DispatchEffect(fx, duration, seed, preferredExecutor)
             State.TrackEffect(fx.id, fx.name, fx.fn, sync_mode, duration, seed, nil)
         end
     end
+    State.runStats.effectsFired = State.runStats.effectsFired + 1
     return true
 end
 
@@ -193,6 +194,17 @@ end
 -- automatic chaos loop.
 function Chaos.DispatchEffect(fx, duration, seed, preferredExecutor)
     return DispatchEffect(fx, duration, seed, preferredExecutor)
+end
+
+-- Recent-effect + heat bookkeeping for dispatches that happen outside the
+-- chaos loop (effect votes). Keeps vote winners out of the next few rolls
+-- exactly like loop-dispatched effects.
+function Chaos.MarkRecent(fx)
+    Heat.OnEffectDispatched(fx)
+    Chaos.recentEffects[fx.id] = true
+    local count = 0
+    for _ in pairs(Chaos.recentEffects) do count = count + 1 end
+    if count > Chaos.maxRecent then Chaos.recentEffects = {} end
 end
 
 local function ChaosLoop()
@@ -212,6 +224,9 @@ local function ChaosLoop()
 
         while Chaos.active do
             Citizen.Wait(1000)
+            -- Pause/stop can land during the Wait; without this check one
+            -- extra tick (including a possible dispatch) ran after pausing.
+            if not Chaos.active then break end
             Chaos.timer = Chaos.timer - (State.meta.timerModifier or 1.0)
 
             interval = State.GetChaosInterval()
@@ -219,8 +234,22 @@ local function ChaosLoop()
             State.Broadcast('cc:chaos_tick', math.max(0, math.ceil(Chaos.timer)), math.floor(interval))
 
             if Chaos.timer <= 0 then
+                -- Post-down grace: hold all dispatches so the squad can
+                -- attempt the rescue. The timer re-arms to a short fuse so
+                -- chaos resumes quickly once the grace window ends.
+                if Heat.InGrace() then
+                    Chaos.timer = math.min(interval, 5)
+                    goto continue
+                end
                 if not State.meta.disableChaos then
                     CleanActiveEffects()
+                    -- Relief valve: at high heat, mostly sit this cycle out.
+                    -- The pacing goal is build -> peak -> BREATH, not a
+                    -- constant scream.
+                    if Heat.Level() == 'HIGH' and math.random() < 0.5 then
+                        Chaos.timer = interval
+                        goto continue
+                    end
                     -- Cap the number of concurrently-active non-instant
                     -- effects so the client doesn't end up running 15+ loops
                     -- per frame (Citizen.Wait(0) tight loops, RenderScriptCams,
@@ -232,15 +261,29 @@ local function ChaosLoop()
                         goto continue
                     end
                     local burst = 1 + math.max(0, tonumber(State.meta.additionalEffects or 0) or 0)
+                    -- Ambient-ped effects are dead air when the lead player
+                    -- is out in the sparse northern half of the map.
+                    local pickOpts = {
+                        maxSeverity = Heat.MaxSeverity(),
+                        blockCrowd = State.leadPos ~= nil and State.leadPos.y > 2500.0,
+                    }
+                    -- Squad vote: hand the roll to the players. The winner
+                    -- dispatches when the vote window closes; this cycle's
+                    -- timer just re-arms.
+                    if EffectVote and EffectVote.ShouldVote() and EffectVote.Begin(pickOpts) then
+                        Chaos.timer = interval
+                        goto continue
+                    end
                     for _ = 1, burst do
                         if concurrent >= Chaos.maxConcurrent then break end
-                        local fx = Effects.GetRandom(Chaos.recentEffects, Chaos.activeEffects, Chaos.activeChannels)
+                        local fx = Effects.GetRandom(Chaos.recentEffects, Chaos.activeEffects, Chaos.activeChannels, pickOpts)
                         if not fx then break end
 
                         local duration = fx.instant and 0 or (fx.short and Config.ShortDuration or Config.EffectDuration)
                         duration = math.max(1, math.floor(duration * (State.meta.durationModifier or 1.0)))
                         local seed = math.random(1, 2147483647)
                         if DispatchEffect(fx, duration, seed) then
+                            Heat.OnEffectDispatched(fx)
                             Chaos.recentEffects[fx.id] = true
                             local count = 0
                             for __ in pairs(Chaos.recentEffects) do count = count + 1 end

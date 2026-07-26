@@ -14,6 +14,7 @@ State = {
         disableChaos = false,
         hideChaosUI = false,
     },
+    runStats = {effectsFired = 0, cougarsKilled = 0, revives = 0, downs = 0},
 }
 
 function State.ResetMeta()
@@ -94,14 +95,45 @@ end
 function State.UpdateDifficulty()
     local totalDist = #(Config.Start - Config.Finish)
     local bestProgress = 0.0
+    local leadPos = nil
     for _, p in pairs(State.players) do
         if p.alive and p.pos then
             local toFinish = #(p.pos - Config.Finish)
             local progress = math.max(0, 1.0 - toFinish / totalDist)
-            if progress > bestProgress then bestProgress = progress end
+            if progress > bestProgress then
+                bestProgress = progress
+                leadPos = p.pos
+            end
         end
     end
     State.difficulty = math.min(1.0, math.max(0.0, bestProgress))
+    State.leadPos = leadPos
+end
+
+-- === ACT STRUCTURE ===
+-- The run has a story arc, not just a difficulty float. Crossing each
+-- threshold (one-way latch per mission) announces the act to every client
+-- and fires cc:act_reached so the director can stage its guaranteed
+-- encounters (first howler at act 2, the alpha at act 3).
+local ACTS = {
+    {t = 0.25, name = 'OUT OF THE CITY',  sub = 'The pride is on your trail'},
+    {t = 0.50, name = 'ALPHA TERRITORY',  sub = 'Something big is out there'},
+    {t = 0.75, name = 'THE FINAL CLIMB',  sub = 'Paleto or death'},
+    {t = 0.93, name = 'PALETO IN SIGHT',  sub = 'Go go go'},
+}
+
+function State.CheckActs()
+    local current = State.actIndex or 0
+    for i = current + 1, #ACTS do
+        if State.difficulty >= ACTS[i].t then
+            State.actIndex = i
+            State.Broadcast('cc:act', i, ACTS[i].name, ACTS[i].sub)
+            TriggerEvent('cc:act_reached', i)
+            print(('[CC] Act %d: %s (difficulty %.2f)'):format(i, ACTS[i].name, State.difficulty))
+        else
+            break
+        end
+    end
 end
 
 function State.TrackEffect(id, name, fn, sync_mode, duration, seed, executorId)
@@ -159,6 +191,8 @@ RegisterNetEvent('cc:join', function()
 
     if State.phase == Phase.RUNNING or State.phase == Phase.PAUSED then
         TriggerEvent('cc:player_joined_running', src)
+    else
+        TriggerEvent('cc:player_joined_lobby', src)
     end
 end)
 
@@ -196,11 +230,16 @@ RegisterNetEvent('cc:died', function()
     if State.phase ~= Phase.RUNNING or not player or not player.alive then return end
     player.alive = false
     player.downedAt = os.time()
+    State.runStats.downs = State.runStats.downs + 1
+    if Heat then Heat.OnPlayerDowned() end
+    -- Fourth arg: revive window so every client can render the bleed-out
+    -- countdown next to the marker instead of guessing.
     State.Broadcast('cc:player_downed', src, {
         x = player.pos.x,
         y = player.pos.y,
         z = player.pos.z,
-    }, State.AliveCount())
+    }, State.AliveCount(), Config.ReviveWindowSec)
+    TriggerClientEvent('cc:bleedout', src, Config.ReviveWindowSec)
 
     if State.phase == Phase.RUNNING and State.AliveCount() < Config.MinSurvivors then
         EndMission('LOST', 'All players dead')
@@ -224,6 +263,8 @@ RegisterNetEvent('cc:revive', function(targetId)
     target.alive = true
     target.downedAt = nil
     target.lastPosAt = os.time()
+    State.runStats.revives = State.runStats.revives + 1
+    if Heat then Heat.OnPlayerRevived() end
     TriggerClientEvent('cc:revived', targetId, {x = target.pos.x, y = target.pos.y, z = target.pos.z})
     State.Broadcast('cc:player_revived', targetId, src)
 end)
@@ -274,6 +315,7 @@ Citizen.CreateThread(function()
             State.UpdateDifficulty()
             State.Broadcast('cc:difficulty', State.difficulty)
             State.CleanExpiredEffects()
+            State.CheckActs()
         end
     end
 end)
@@ -346,9 +388,13 @@ function StartMission()
     local generation = State.missionGeneration
     State.startTime = os.time()
     State.difficulty = 0.0
+    State.actIndex = 0
+    State.leadPos = nil
     State.activeEffectsList = {}
     State.spawnLoad = {}
     State.ResetMeta()
+
+    State.runStats = {effectsFired = 0, cougarsKilled = 0, revives = 0, downs = 0}
 
     for id, p in pairs(State.players) do
         p.alive = true
@@ -357,11 +403,19 @@ function StartMission()
         State.spawnLoad[id] = 0
     end
 
-    State.Broadcast('cc:mission_start', {
-        start = Config.Start,
-        finish = Config.Finish,
-        vehicle = Config.StartVehicle,
-    })
+    -- Per-player send instead of a broadcast: each client gets a grid slot
+    -- so four squad cars don't spawn inside each other and detonate the
+    -- opening ten seconds of the run.
+    local slot = 0
+    for id in pairs(State.players) do
+        TriggerClientEvent('cc:mission_start', id, {
+            start = Config.Start,
+            finish = Config.Finish,
+            vehicle = Config.StartVehicle,
+            slot = slot,
+        })
+        slot = slot + 1
+    end
 
     SetTimeout(3000, function()
         -- A startup can be cancelled by /cc_stop or lose its final player
@@ -403,6 +457,14 @@ function EndMission(result, detail)
         time = elapsed,
         alive = State.AliveCount(),
         difficulty = State.difficulty,
+        stats = State.runStats,
+    })
+    -- Server-side listeners (records.lua) get the authoritative summary.
+    TriggerEvent('cc:mission_finished', result, {
+        time = elapsed,
+        difficulty = State.difficulty,
+        players = State.PlayerCount(),
+        stats = State.runStats,
     })
 
     TriggerEvent('cc:chaos_stop')

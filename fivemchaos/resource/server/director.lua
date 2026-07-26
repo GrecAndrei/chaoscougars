@@ -9,6 +9,9 @@ Director = {
     cougars = {},
     spawnRequests = {},
     lastSpawn = 0,
+    -- Act setpieces: one-shot guaranteed encounters staged by cc:act_reached.
+    forcedSpawn = nil,      -- cougar type to spawn at the next valid tick
+    alphaSpawned = false,   -- the act-3 alpha fires once per mission
 }
 
 local CougarTypes = {
@@ -159,8 +162,17 @@ local function DirectorLoop()
 
             local now = os.time()
             local cooldown = State.GetSpawnCooldown()
+            -- Heat pacing: back off while the squad is overwhelmed, press
+            -- while they are cruising. Forced act setpieces skip this —
+            -- they ARE the peak.
+            if not Director.forcedSpawn then
+                local level = Heat.Level()
+                if level == 'HIGH' and CountCougars() > 0 then goto skip end
+                if Heat.InGrace() and CountCougars() > 2 then goto skip end
+                if level == 'LOW' then cooldown = cooldown * 0.75 end
+            end
             if now - Director.lastSpawn < cooldown then goto skip end
-            if CountCougars() >= State.GetMaxCougars() then goto skip end
+            if not Director.forcedSpawn and CountCougars() >= State.GetMaxCougars() then goto skip end
 
             local target = PickTargetPlayer()
             if not target then goto skip end
@@ -189,12 +201,23 @@ local function DirectorLoop()
                 goto skip
             end
 
-            local cougarType = PickCougarType()
-            -- A swarm represents five actual hostile entities. Do not let a
-            -- single director tick exceed the configured world threat cap.
-            if CountCougars() + SpawnReportQuota(cougarType) > State.GetMaxCougars() then
-                goto skip
+            local cougarType
+            if Director.forcedSpawn then
+                -- Act setpiece: guaranteed encounter, bypasses the weighted
+                -- roll and the threat cap (a setpiece exceeding the cap by
+                -- one is intended — it is the moment).
+                cougarType = Director.forcedSpawn
+                Director.forcedSpawn = nil
+                print(('[CC] Director: staging forced %s encounter'):format(cougarType))
+            else
+                cougarType = PickCougarType()
+                -- A swarm represents five actual hostile entities. Do not let a
+                -- single director tick exceed the configured world threat cap.
+                if CountCougars() + SpawnReportQuota(cougarType) > State.GetMaxCougars() then
+                    goto skip
+                end
             end
+            if cougarType == 'alpha' then Director.alphaSpawned = true end
             Director.lastSpawn = now
 
             -- Broadcast to ALL clients: the target client becomes the owner of
@@ -204,6 +227,7 @@ local function DirectorLoop()
             -- and every owner-gated AI/effect branch never runs -> the cougar
             -- just stands there doing nothing.
             Director.QueueSpawn(cougarType, pos, target.id)
+            Heat.OnCougarSpawned(cougarType)
 
             ::skip::
         end
@@ -269,6 +293,7 @@ RegisterNetEvent('cc:cougar_dead', function(netId)
     local cougar = Director.cougars[netId]
     if not cougar or cougar.owner ~= src then return end
     Director.cougars[netId] = nil
+    State.runStats.cougarsKilled = State.runStats.cougarsKilled + 1
     local request = Director.spawnRequests[cougar.requestId]
     if request then
         request.active = math.max(0, request.active - 1)
@@ -346,8 +371,22 @@ AddEventHandler('cc:director_start', function()
     Director.cougars = {}
     Director.spawnRequests = {}
     Director.lastSpawn = 0
+    Director.forcedSpawn = nil
+    Director.alphaSpawned = false
     DirectorLoop()
     CleanupLoop()
+end)
+
+-- Act setpieces. Act 2 (50%): the first howler announces alpha territory.
+-- Act 3 (75%): the alpha itself — the final-stretch boss — if the weighted
+-- roll hasn't already produced one this mission.
+AddEventHandler('cc:act_reached', function(actIndex)
+    if not Director.active then return end
+    if actIndex == 2 then
+        Director.forcedSpawn = 'howler'
+    elseif actIndex == 3 and not Director.alphaSpawned then
+        Director.forcedSpawn = 'alpha'
+    end
 end)
 
 AddEventHandler('cc:director_stop', function()

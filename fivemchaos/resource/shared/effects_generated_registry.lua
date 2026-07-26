@@ -372,5 +372,5 @@ for _, e in ipairs(generated) do
     Effects.Pool[#Effects.Pool + 1] = e
 end
 
--- Validate and index only after the generated entries are appended.
-Effects.FinalizeRegistry()
+-- NOTE: Effects.FinalizeRegistry() is called by shared/effects_tuning.lua,
+-- which loads after this file and applies flag corrections first.

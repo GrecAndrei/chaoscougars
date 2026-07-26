@@ -829,6 +829,13 @@ local function SpawnLeech(pos, requestId)
     SetPedArmour(cougar, 120)
     SetEntityMaxSpeed(cougar, 12.5)
 
+    -- Aura: thin dark smoke so the parasite reads differently from a
+    -- normal cougar before it latches.
+    RequestNamedPtfxAsset('core')
+    while not HasNamedPtfxAssetLoaded('core') do Citizen.Wait(10) end
+    UseParticleFxAsset('core')
+    local ptfx = StartParticleFxLoopedOnEntity('ent_amb_smoke_foundry', cougar, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.25, false, false, false)
+
     local netId = NetworkGetNetworkIdFromEntity(cougar)
     RegisterCougar(netId, {cougar}, 'leech', pos, requestId)
 
@@ -884,6 +891,7 @@ local function SpawnLeech(pos, requestId)
             ::next::
         end
         if DoesEntityExist(cougar) and IsEntityAttached(cougar) then DetachEntity(cougar, true, true) end
+        StopParticleFxLooped(ptfx, false)
         Cleanup(netId)
     end)
 end
@@ -896,6 +904,12 @@ local function SpawnHowler(pos, requestId)
     SetEntityHealth(cougar, 750)
     SetPedArmour(cougar, 250)
     SetEntityMaxSpeed(cougar, 8.0)
+
+    -- Aura: crackling charge — the visual tell that this one detonates air.
+    RequestNamedPtfxAsset('core')
+    while not HasNamedPtfxAssetLoaded('core') do Citizen.Wait(10) end
+    UseParticleFxAsset('core')
+    local ptfx = StartParticleFxLoopedOnEntity('ent_amb_elec_crackle', cougar, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 1.4, false, false, false)
 
     local netId = NetworkGetNetworkIdFromEntity(cougar)
     RegisterCougar(netId, {cougar}, 'howler', pos, requestId)
@@ -937,6 +951,7 @@ local function SpawnHowler(pos, requestId)
             end
             ::next::
         end
+        StopParticleFxLooped(ptfx, false)
         Cleanup(netId)
     end)
 end
@@ -951,6 +966,12 @@ local function SpawnAlpha(pos, requestId)
     SetPedArmour(cougar, 500)
     SetEntityMaxSpeed(cougar, 12.0)
     SetPedMoveRateOverride(cougar, 1.2)
+
+    -- Aura: heavy smoke column. The boss should be legible from 100m out.
+    RequestNamedPtfxAsset('core')
+    while not HasNamedPtfxAssetLoaded('core') do Citizen.Wait(10) end
+    UseParticleFxAsset('core')
+    local ptfx = StartParticleFxLoopedOnEntity('ent_amb_smoke_foundry', cougar, 0.0, 0.0, 0.4, 0.0, 0.0, 0.0, 1.6, false, false, false)
 
     local netId = NetworkGetNetworkIdFromEntity(cougar)
     RegisterCougar(netId, {cougar}, 'alpha', pos, requestId)
@@ -992,6 +1013,7 @@ local function SpawnAlpha(pos, requestId)
             end
             ::next::
         end
+        StopParticleFxLooped(ptfx, false)
         Cleanup(netId)
     end)
 end
@@ -1062,10 +1084,43 @@ local Spawners = {
     splitter    = SpawnSplitter,
 }
 
+-- First-encounter teaching. Every cougar type has designed counterplay;
+-- these one-liners are how players learn it without a wiki. Shown once per
+-- mission per type, on EVERY client (the spawn broadcast reaches all).
+local THREAT_TIPS = {
+    fence       = 'FENCE — SWERVE PAST, DO NOT TOUCH IT',
+    car         = 'INTERCEPTOR — OUTRUN THE BUFFALO',
+    shooter     = 'SHOOTER — KEEP MOVING, BREAK LINE OF SIGHT',
+    ball_blue   = 'LAUNCHER — CONTACT SENDS YOU FLYING',
+    ball_purple = 'YEETER — CONTACT SENDS YOU SIDEWAYS',
+    stun        = 'STUN — ONE TOUCH KILLS YOUR ENGINE',
+    phantom     = 'PHANTOM — INVISIBLE UNTIL IT IS CLOSE',
+    jesus       = 'JESUS — BURNING AURA, DO NOT STOP NEAR HIM',
+    swarm       = 'SWARM — FIVE OF THEM, KEEP ROLLING',
+    magnetic    = 'MAGNET — POWER THROUGH THE PULL',
+    bomber      = 'BOMBER — DISTANCE OR DEATH',
+    splitter    = 'SPLITTER — IT MULTIPLIES WHEN KILLED',
+    pouncer     = 'POUNCER — JUKE THE LEAP',
+    leech       = 'LEECH — HOLD TOP SPEED TO SHAKE IT OFF',
+    howler      = 'HOWLER — GET CLEAR OF THE BLAST RADIUS',
+    alpha       = 'THE ALPHA — DAMAGE IT, DODGE THE PULSE',
+}
+local seenThreats = {}
+
+RegisterNetEvent('cc:mission_start', function()
+    seenThreats = {}
+end)
+
 RegisterNetEvent('cc:spawn_cougar', function(cougarType, pos, targetPlayerId, requestId)
     if type(cougarType) ~= 'string' or type(requestId) ~= 'string' or requestId == '' then return end
     local spawner = Spawners[cougarType]
     if not spawner then return end
+    if not seenThreats[cougarType] and THREAT_TIPS[cougarType] then
+        seenThreats[cougarType] = true
+        SendNUIMessage({type = 'threat', name = THREAT_TIPS[cougarType]})
+        PlaySoundFrontend(-1, cougarType == 'alpha' and 'RACE_PLACED' or 'CHECKPOINT_MISSED',
+            cougarType == 'alpha' and 'HUD_AWARDS' or 'HUD_MINI_GAME_SOUNDSET', false)
+    end
     local myServerId = GetPlayerServerId(PlayerId())
     -- Server tells us which client is the AI driver. The entity itself was
     -- created networked and syncs to every client; the AI thread is what we

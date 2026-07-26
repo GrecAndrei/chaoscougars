@@ -65,9 +65,9 @@ RegisterNetEvent('cc:vote_pause', function()
     State.Broadcast('cc:vote_update', count, threshold)
 
     if count >= threshold then
-        if State.phase == 'RUNNING' then
+        if State.phase == Phase.RUNNING then
             PauseMission(true)
-        elseif State.phase == 'PAUSED' then
+        elseif State.phase == Phase.PAUSED then
             PauseMission(false)
         end
         votes = {}

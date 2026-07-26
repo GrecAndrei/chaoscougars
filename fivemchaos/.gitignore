@@ -4,3 +4,7 @@ ChaosModV-master/
 .vs/
 *.user
 build/
+__pycache__/
+*.pyc
+# runtime state written by records.lua when the server runs from this tree
+resource/records.json

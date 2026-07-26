@@ -33,7 +33,20 @@ local function ExecClientLua(code)
     return true, out
 end
 
+-- Kill switch: client-side exec only runs when the server replicates
+-- `setr chaoscougar_repl_enabled 1` (dev servers only). Without this gate,
+-- an accidental `ensure resource_repl` on a public server hands any script
+-- that can reach TriggerClientEvent a remote Lua exec on every player.
+local function ReplEnabled()
+    return GetConvar('chaoscougar_repl_enabled', '0') == '1'
+end
+
 RegisterNetEvent('cc_repl:exec', function(requestId, code)
+    if not ReplEnabled() then
+        TriggerServerEvent('cc_repl:client_response', requestId, false,
+            'repl disabled (set `setr chaoscougar_repl_enabled 1` on a dev server)')
+        return
+    end
     local ok, result = ExecClientLua(code)
     TriggerServerEvent('cc_repl:client_response', requestId, ok, result)
 end)
